@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+
+import chardet
+import difflib
+import hashlib
+import json
+import os
+import requests
+import shutil
+import subprocess
+import sys
+from subprocess import PIPE
+
+no_warning = True
+
+def printInfo(msg):
+    print(msg, file=sys.stderr)
+
+def printWarning(msg):
+    if no_warning is False:
+        print(msg, file=sys.stderr)
+
+def printError(msg):
+    print(msg, file=sys.stderr)
+
+def shell(cmdline, intext):
+    proc = subprocess.Popen(cmdline, shell=True, stdin=PIPE, stdout=PIPE)
+    out, err = proc.communicate(input=intext.encode())
+    if len(out) < 0:
+        return None
+
+    coding = chardet.detect(out)["encoding"]
+    if coding is None:
+        return None
+    
+    return out.decode(coding)
+
+class WebChecker:
+
+    def __init__(self):
+        self.summaries = {}
+        self.contents = {}
+        self.diffs = {}
+        self.cache_dir = os.path.expanduser("~") + "/.cache/" + os.path.basename(__file__)
+        self.cache_backup_dir = self.cache_dir + ".bak"
+        self.files_dir = self.cache_dir + "/files"
+        self.current_dir = "."
+        os.makedirs(self.cache_dir, mode=0o777, exist_ok=True)
+        os.makedirs(self.files_dir, mode=0o777, exist_ok=True)
+        self.summaries_path = self.cache_dir + "/summaries.json"
+        self.diffs_path = self.current_dir + "/diffs.log"
+        if os.path.isdir(self.cache_dir):
+            if os.path.isdir(self.cache_backup_dir):
+                shutil.rmtree(self.cache_backup_dir)
+            shutil.copytree(self.cache_dir, self.cache_backup_dir)
+
+    def get_resid(self, name, url):
+        resid = hashlib.md5(url.encode()).hexdigest()
+        return resid
+
+    def update_summary(self, resid, key, value):
+        self.summaries[resid].update({ key: value })
+
+    def get_summary_value(self, resid, key):
+        return self.summaries[resid].get(key)
+
+    def init_summary(self, resid, name = None, url = None, status = -1):
+        if name is None:
+            self.update_summary(resid, "status", status)
+        else:
+            self.summaries.update({ resid: {}})
+            self.update_summary(resid, "name", name)
+            self.update_summary(resid, "url", url)
+            self.update_summary(resid, "status", status)
+
+    def update_contents(self, resid, text, updated = True):
+        self.contents[resid].update({ "updated": updated, "text": text})
+
+    def init_contents(self, resid, text = None):
+        self.contents.update({ resid: {}})
+        self.update_contents(resid, text, updated=False)
+
+    def load(self, sitelist):
+        try:
+            with open(self.summaries_path) as fcache:
+                self.summaries = json.loads(fcache.read())
+            for resid in self.summaries:
+                self.update_summary(resid, "status", -2)
+                with open(self.files_dir + "/" + resid) as fc:
+                    contents = fc.read()
+                self.init_contents(resid, contents)
+        except Exception as e:
+            printWarning(e)
+
+        for site in sitelist:
+            name = site.get("name")
+            url = site.get("url")
+            resid = self.get_resid(site["name"], site["url"])
+            if name is not None and url is not None:
+                if resid not in self.summaries:
+                    printInfo("Added {}. {}".format(name, url))
+                    self.init_summary(resid, name, url, -1)
+                    self.init_contents(resid)
+                else:
+                    self.update_summary(resid, "status", -1)
+
+        deleting_list = []
+        for resid in self.summaries:
+            if self.get_summary_value(resid, "status") == -2:
+                deleting_list.append(resid)
+        for resid in deleting_list:
+            name = self.get_summary_value(resid, "name")
+            url = self.get_summary_value(resid, "url")
+            printInfo("Removed {}. {}".format(name, url))
+            del self.summaries[resid]
+            del self.contents[resid]
+
+    def save(self):
+        if len(self.summaries) > 0:
+            try:
+                with open(self.summaries_path, "w", encoding="utf-8") as fcache:
+                    json.dump(self.summaries, fcache, ensure_ascii=False, indent=4)
+                for resid, cache in self.contents.items():
+                    if cache["updated"] is True:
+                        with open(self.files_dir + "/" + resid, "w") as fc:
+                            fc.write(cache["text"])
+                if len(self.diffs) > 0:
+                    with open(self.diffs_path, "w", encoding="utf-8") as fdiffs:
+                        sep = None
+                        for resid, diff in self.diffs.items():
+                            name = diff.get("name")
+                            url = diff.get("url")
+                            log = diff.get("log")
+                            if sep is not None:
+                                fdiffs.write(sep)
+                            fdiffs.write("{} ({})\n".format(name, resid))
+                            fdiffs.write("{}\n".format(url))
+                            fdiffs.write("{}\n".format(log))
+                            sep = "-" * 64 + "\n"
+            except Exception as e:
+                printWarning(e)
+
+    def render(self, html):
+        return shell("w3m -T text/html -dump", html)
+
+    def update(self):
+        self.diffs = {}
+        for resid, summary in self.summaries.items():
+            name = summary["name"]
+            url = summary["url"]
+            try:
+                res = requests.get(url)
+                self.update_summary(resid, "status", res.status_code)
+                if res.status_code >= 400:
+                    printWarning("Failed to fetch {}. (status={})".format(name, res.status_code))
+                else:
+                    res.encoding = res.apparent_encoding
+                    self.update_summary(resid, "encoding", res.encoding)
+                    md5 = hashlib.md5(res.text.encode()).hexdigest()
+                    if "hash" not in summary or md5 != summary["hash"]:
+                        self.diffs.update({ resid: { "name": name, "url": url }})
+                        if self.contents[resid]["text"] is None:
+                            self.diffs[resid].update({ "log": "Initial update." })
+                        else:
+                            old_lines = self.render(self.contents[resid]["text"]).splitlines()
+                            new_lines = self.render(res.text).splitlines()
+                            diff_lines = difflib.context_diff(old_lines, new_lines)
+                            diff = []
+                            for l in diff_lines:
+                                if l[0] == "+" or l[0] == "!":
+                                    diff.append(l)
+                            self.diffs[resid].update({ "log": "\n".join(diff) })
+                        self.update_summary(resid, "hash", md5)
+                        self.update_contents(resid, res.text)
+                        printInfo("Updated {}. {}".format(name, url))
+                    if "last-modified" in res.headers:
+                        last_modified = res.headers["last-modified"]
+                        self.update_summary(resid, "last-modefied", last_modified)
+            except requests.exceptions.RequestException as e:
+                printWarning("Failed to fetch {}. ({})".format(name, e))
+            except Exception as e:
+                printWarning("Failed to fetch {}. ({})".format(name, e))
+
+if __name__ == "__main__":
+
+    checker = WebChecker()
+
+    checker.load([
+        { "name": "内閣官房", "url": "https://www.kantei.go.jp/jp/kakugikettei/index.html" },
+        { "name": "地方創生", "url": "https://www.kantei.go.jp/jp/singi/sousei/news/index.html" },
+        { "name": "スーパーシティ", "url": "https://www.kantei.go.jp/jp/singi/tiiki/kokusentoc/supercity/openlabo/supercitycontents.html" },
+        { "name": "経済産業省", "url": "https://www.meti.go.jp/press/index.html" },
+        { "name": "総務省", "url": "https://www.soumu.go.jp/menu_news/s-news/index.html" },
+        { "name": "国土交通省", "url": "https://www.mlit.go.jp/report/press/index.html" },
+        { "name": "IT総合戦略本部", "url": "https://www.kantei.go.jp/jp/singi/it2/" },
+        { "name": "デジタル・ガバメント閣僚会議", "url": "https://www.kantei.go.jp/jp/singi/it2/egov/" },
+        { "name": "各府省CIO連絡会議", "url": "https://www.kantei.go.jp/jp/singi/it2/cio/index.html" },
+        { "name": "規制改革推進会議", "url": "https://www8.cao.go.jp/kisei-kaikaku/kisei/meeting/meeting.html" },
+        { "name": "経済財政諮問会議", "url": "https://www5.cao.go.jp/keizai-shimon/index.html" },
+        { "name": "国家戦略特別区域諮問会議", "url": "http://www.kantei.go.jp/jp/singi/tiiki/kokusentoc/shimonkaigi.html" },
+        { "name": "宇宙政策委員会", "url": "https://www8.cao.go.jp/space/comittee/kaisai.html" },
+        { "name": "成長戦略会議", "url": "https://www.cas.go.jp/jp/seisaku/seicho/kaisai.html" },
+        { "name": "国際博覧会推進本部", "url": "https://www.cas.go.jp/jp/seisaku/expo_suisin_honbu/index.html" },
+        { "name": "万博協会", "url": "https://www.expo2025.or.jp/news/category/pressrelease" },
+        { "name": "hoge協会", "url": "https://www.expo2025.or.jp/news/category/pressrelease/hoge" }
+    ])
+
+    checker.update()
+    checker.save()
