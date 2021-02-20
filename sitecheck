@@ -11,7 +11,7 @@ import subprocess
 import sys
 from subprocess import PIPE
 
-no_warning = True
+no_warning = False
 
 def printInfo(msg):
     print(msg, file=sys.stderr)
@@ -84,13 +84,17 @@ class WebChecker:
         try:
             with open(self.summaries_path) as fcache:
                 self.summaries = json.loads(fcache.read())
-            for resid in self.summaries:
-                self.update_summary(resid, "status", -2)
+        except Exception as e:
+            printWarning("Filed to load summary. {}".format(e))
+
+        for resid in self.summaries:
+            self.update_summary(resid, "status", -2)
+            try:
                 with open(self.files_dir + "/" + resid) as fc:
                     contents = fc.read()
-                self.init_contents(resid, contents)
-        except Exception as e:
-            printWarning(e)
+            except Exception as e:
+                printWarning("Filed to load {}: {}".format(self.get_summary_value(resid, "name"), e))
+            self.init_contents(resid, contents)
 
         for site in sitelist:
             name = site.get("name")
@@ -120,25 +124,33 @@ class WebChecker:
             try:
                 with open(self.summaries_path, "w", encoding="utf-8") as fcache:
                     json.dump(self.summaries, fcache, ensure_ascii=False, indent=4)
-                for resid, cache in self.contents.items():
-                    if cache["updated"] is True:
+            except Exception as e:
+                printWarning("Filed to save summary. {}".format(e))
+
+            for resid, cache in self.contents.items():
+                if cache["updated"] is True:
+                    try:
                         with open(self.files_dir + "/" + resid, "w") as fc:
                             fc.write(cache["text"])
+                    except Exception as e:
+                        printWarning("Filed to save {}: {}".format(self.get_summary_value(resid, "name"), e))
+
                 if len(self.diffs) > 0:
-                    with open(self.diffs_path, "w", encoding="utf-8") as fdiffs:
-                        sep = None
-                        for resid, diff in self.diffs.items():
-                            name = diff.get("name")
-                            url = diff.get("url")
-                            log = diff.get("log")
-                            if sep is not None:
-                                fdiffs.write(sep)
-                            fdiffs.write("{} ({})\n".format(name, resid))
-                            fdiffs.write("{}\n".format(url))
-                            fdiffs.write("{}\n".format(log))
-                            sep = "-" * 64 + "\n"
-            except Exception as e:
-                printWarning(e)
+                    try:
+                        with open(self.diffs_path, "w", encoding="utf-8") as fdiffs:
+                            sep = None
+                            for resid, diff in self.diffs.items():
+                                name = diff.get("name")
+                                url = diff.get("url")
+                                log = diff.get("log")
+                                if sep is not None:
+                                    fdiffs.write(sep)
+                                fdiffs.write("{} ({})\n".format(name, resid))
+                                fdiffs.write("{}\n".format(url))
+                                fdiffs.write("{}\n".format(log))
+                                sep = "-" * 64 + "\n"
+                    except Exception as e:
+                        printWarning("Failed to save {}. {}".format(self.diffs_path, e))
 
     def render(self, html):
         return shell("w3m -T text/html -dump", html)
@@ -148,38 +160,42 @@ class WebChecker:
         for resid, summary in self.summaries.items():
             name = summary["name"]
             url = summary["url"]
+            res = None
             try:
                 res = requests.get(url)
-                self.update_summary(resid, "status", res.status_code)
-                if res.status_code >= 400:
-                    printWarning("Failed to fetch {}. (status={})".format(name, res.status_code))
-                else:
-                    res.encoding = res.apparent_encoding
-                    self.update_summary(resid, "encoding", res.encoding)
-                    md5 = hashlib.md5(res.text.encode()).hexdigest()
-                    if "hash" not in summary or md5 != summary["hash"]:
-                        self.diffs.update({ resid: { "name": name, "url": url }})
-                        if self.contents[resid]["text"] is None:
-                            self.diffs[resid].update({ "log": "Initial update." })
-                        else:
-                            old_lines = self.render(self.contents[resid]["text"]).splitlines()
-                            new_lines = self.render(res.text).splitlines()
-                            diff_lines = difflib.context_diff(old_lines, new_lines)
-                            diff = []
-                            for l in diff_lines:
-                                if l[0] == "+" or l[0] == "!":
-                                    diff.append(l)
-                            self.diffs[resid].update({ "log": "\n".join(diff) })
-                        self.update_summary(resid, "hash", md5)
-                        self.update_contents(resid, res.text)
-                        printInfo("Updated {}. {}".format(name, url))
-                    if "last-modified" in res.headers:
-                        last_modified = res.headers["last-modified"]
-                        self.update_summary(resid, "last-modefied", last_modified)
             except requests.exceptions.RequestException as e:
                 printWarning("Failed to fetch {}. ({})".format(name, e))
+                continue
             except Exception as e:
                 printWarning("Failed to fetch {}. ({})".format(name, e))
+                continue
+
+            self.update_summary(resid, "status", res.status_code)
+            if res.status_code >= 400:
+                printWarning("Failed to fetch {}. (status={})".format(name, res.status_code))
+            else:
+                res.encoding = res.apparent_encoding
+                self.update_summary(resid, "encoding", res.encoding)
+                md5 = hashlib.md5(res.text.encode()).hexdigest()
+                if "hash" not in summary or md5 != summary["hash"]:
+                    self.diffs.update({ resid: { "name": name, "url": url }})
+                    if self.contents[resid]["text"] is None:
+                        self.diffs[resid].update({ "log": "Initial update." })
+                    else:
+                        old_lines = self.render(self.contents[resid]["text"]).splitlines()
+                        new_lines = self.render(res.text).splitlines()
+                        diff_lines = difflib.context_diff(old_lines, new_lines)
+                        diff = []
+                        for l in diff_lines:
+                            if l[0] == "+" or l[0] == "!":
+                                diff.append(l)
+                        self.diffs[resid].update({ "log": "\n".join(diff) })
+                    self.update_summary(resid, "hash", md5)
+                    self.update_contents(resid, res.text)
+                    printInfo("Updated {}. {}".format(name, url))
+                if "last-modified" in res.headers:
+                    last_modified = res.headers["last-modified"]
+                    self.update_summary(resid, "last-modefied", last_modified)
 
 if __name__ == "__main__":
 
