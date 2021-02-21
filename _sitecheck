@@ -1,0 +1,42 @@
+#
+# Example of ~/.sitecheck
+#
+# name=url
+# comment line: start with #
+# delimiter: =
+# escape: \
+# quote: "
+#
+
+内閣官房=https://www.kantei.go.jp/jp/kakugikettei/index.html
+地方創生=https://www.kantei.go.jp/jp/singi/sousei/news/index.html
+スーパーシティ=https://www.kantei.go.jp/jp/singi/tiiki/kokusentoc/supercity/openlabo/supercitycontents.html
+経済産業省=https://www.meti.go.jp/press/index.html
+総務省=https://www.soumu.go.jp/menu_news/s-news/index.html
+国土交通省=https://www.mlit.go.jp/report/press/index.html
+IT総合戦略本部=https://www.kantei.go.jp/jp/singi/it2/
+デジタル・ガバメント閣僚会議=https://www.kantei.go.jp/jp/singi/it2/egov/
+各府省CIO連絡会議=https://www.kantei.go.jp/jp/singi/it2/cio/index.html
+規制改革推進会議=https://www8.cao.go.jp/kisei-kaikaku/kisei/meeting/meeting.html
+経済財政諮問会議=https://www5.cao.go.jp/keizai-shimon/index.html
+国家戦略特別区域諮問会議=http://www.kantei.go.jp/jp/singi/tiiki/kokusentoc/shimonkaigi.html
+宇宙政策委員会=https://www8.cao.go.jp/space/comittee/kaisai.html
+成長戦略会議=https://www.cas.go.jp/jp/seisaku/seicho/kaisai.html
+国際博覧会推進本部=https://www.cas.go.jp/jp/seisaku/expo_suisin_honbu/index.html
+万博協会=https://www.expo2025.or.jp/news/category/pressrelease
+
+# 以下OKだがURLが同じのため対象には追加されない
+#"万博協会1"="https://www.expo2025.or.jp/news/category/pressrelease"
+#万博協会2="https://www.expo2025.or.jp/news/category/pressrelease"
+#"万博協会3"=https://www.expo2025.or.jp/news/category/pressrelease
+#万博協会\4="\h\t\t\p\s\:\/\/www.expo2025.or.jp/news/category/pressrelease"
+
+# 以下エラー
+#hoge協会=https://www.expo2025.or.jp/news/category/pressrelease/hoge
+#hogehoge協会=http://hoge.hogehogehogehogehogehogehogehogehogehoge.jp"
+
+# 以下無視
+#ダミー
+#空エントリ=
+#=空名前
+#=
