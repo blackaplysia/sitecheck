@@ -237,19 +237,22 @@ if __name__ == "__main__":
             super(SortingHelpFormatter, self).add_arguments(actions)
 
     parser = argparse.ArgumentParser(description="Check updating of web sites", usage="%(prog)s [options] [target]", formatter_class=SortingHelpFormatter)
-    parser.add_argument("-i", "--import", dest="site_list_file", default=None, help="import site list from file")
-    parser.add_argument("-a", "--add", dest="new_site", action="append", help="add an site like 'NAME=URL'")
-    parser.add_argument("-d", "--delete", dest="deleting_site", action="append", help="delete an site")
-    parser.add_argument("-l", "--list", action="store_true", help="list target sites")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("-c", "--check", action="store_true", help="check sites")
+    group.add_argument("-l", "--list", action="store_true", help="list target sites")
+    group.add_argument("-e", "--export", dest="expfile", default=None, help="export site list to file")
+    group.add_argument("-i", "--import", dest="impfile", default=None, help="import site list from file")
+    group.add_argument("-a", "--add", dest="new_site", action="append", help="add an site like 'NAME=URL'")
+    group.add_argument("-d", "--delete", dest="deleting_site", action="append", help="delete an site")
 
     args = parser.parse_args()
 
     config = None
     lines = None
-    if args.site_list_file is not None:
-        if os.path.exists(args.site_list_file):
+    if args.impfile is not None:
+        if os.path.exists(args.impfile):
             try:
-                with open(args.site_list_file) as fconfig:
+                with open(args.impfile) as fconfig:
                     lines = fconfig.read() + "\n"
             except Exception as e:
                 printError("Failed to read config. {}".format(e))
@@ -266,9 +269,21 @@ if __name__ == "__main__":
     checker = WebChecker()
     checker.load(config, args.deleting_site)
 
-    if args.list is True:
+    if args.expfile is not None:
+        try:
+            with open(args.expfile, "w", newline="") as fexp:
+                writer = csv.writer(fexp, delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
+                for resid in checker.summaries:
+                    name = checker.get_summary_value(resid, "name")
+                    url = checker.get_summary_value(resid, "url")
+                    writer.writerow([name, url])
+        except Exception as e:
+            printError("Failed to write config. {}".format(e))
+            exit(errno.ENOENT)
+    elif args.list is True:
         checker.list()
+    elif args.check is True:
+        checker.update()
         checker.save()
     else:
-        checker.update()
         checker.save()
