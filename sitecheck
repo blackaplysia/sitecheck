@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import chardet
-import csv
 import difflib
 import errno
 import hashlib
@@ -60,6 +59,13 @@ class WebChecker:
         resid = hashlib.md5(url.encode()).hexdigest()
         return resid
 
+    def get_resid_by_name(self, name):
+        for resid, summary in self.summaries.items():
+            if summary.get("name") == name:
+                return resid
+        else:
+            return None
+
     def update_summary(self, resid, key, value):
         self.summaries[resid].update({ key: value })
 
@@ -82,7 +88,13 @@ class WebChecker:
         self.contents.update({ resid: {}})
         self.update_contents(resid, text, updated=False)
 
-    def load(self, sitelist):
+    def list(self):
+        for resid, summary in self.summaries.items():
+            name = summary.get("name")
+            url = summary.get("url")
+            print("{} {} {}".format(resid, name, url))
+
+    def load(self, site_list, deleting_list):
         try:
             with open(self.summaries_path) as fcache:
                 self.summaries = json.loads(fcache.read())
@@ -90,7 +102,7 @@ class WebChecker:
             printWarning("Filed to load summary. {}".format(e))
 
         for resid in self.summaries:
-            self.update_summary(resid, "status", -2)
+            self.update_summary(resid, "status", -1)
             try:
                 with open(self.files_dir + "/" + resid) as fc:
                     contents = fc.read()
@@ -98,44 +110,42 @@ class WebChecker:
                 printWarning("Filed to load {}: {}".format(self.get_summary_value(resid, "name"), e))
             self.init_contents(resid, contents)
 
-        for site in sitelist:
-            if len(site) < 2:
-                continue
+        if site_list is not None:
+            for site in site_list:
+                if len(site) < 2:
+                    continue
 
-            name = None
-            url = None
-            if isinstance(site, list):
-                name = site[0].strip()
-                url = site[1].strip()
-            elif isinstance(site, dict):
-                name = site.get("name").strip()
-                url = site.get("url").strip()
-            else:
-                continue
+                name = None
+                url = None
+                if isinstance(site, list):
+                    name = site[0].strip()
+                    url = site[1].strip()
+                elif isinstance(site, dict):
+                    name = site.get("name").strip()
+                    url = site.get("url").strip()
+                else:
+                    continue
 
-            if name is None or len(name) < 1:
-                continue
-            if url is None or len(url) < 1:
-                continue
+                if name is None or len(name) < 1:
+                    continue
+                if url is None or len(url) < 1:
+                    continue
 
-            resid = self.get_resid(name, url)
-            if resid not in self.summaries:
-                printInfo("Added {}. {}".format(name, url))
-                self.init_summary(resid, name, url, -1)
-                self.init_contents(resid)
-            else:
-                self.update_summary(resid, "status", -1)
+                resid = self.get_resid(name, url)
+                if resid not in self.summaries:
+                    printInfo("Added {}. {}".format(name, url))
+                    self.init_summary(resid, name, url, -1)
+                    self.init_contents(resid)
 
-        deleting_list = []
-        for resid in self.summaries:
-            if self.get_summary_value(resid, "status") == -2:
-                deleting_list.append(resid)
-        for resid in deleting_list:
-            name = self.get_summary_value(resid, "name")
-            url = self.get_summary_value(resid, "url")
-            printInfo("Removed {}. {}".format(name, url))
-            del self.summaries[resid]
-            del self.contents[resid]
+        if deleting_list is not None:
+            for name in deleting_list:
+                resid = self.get_resid_by_name(name)
+                if resid is not None:
+                    name = self.get_summary_value(resid, "name")
+                    url = self.get_summary_value(resid, "url")
+                    printInfo("Removed {}. {}".format(name, url))
+                    del self.summaries[resid]
+                    del self.contents[resid]
 
     def save(self):
         if len(self.summaries) > 0:
@@ -217,19 +227,48 @@ class WebChecker:
 
 if __name__ == "__main__":
 
-    checker = WebChecker()
+    import argparse
+    import csv
+    from argparse import HelpFormatter
+    from operator import attrgetter
+    class SortingHelpFormatter(HelpFormatter):
+        def add_arguments(self, actions):
+            actions = sorted(actions, key=attrgetter("option_strings"))
+            super(SortingHelpFormatter, self).add_arguments(actions)
+
+    parser = argparse.ArgumentParser(description="Check updating of web sites", usage="%(prog)s [options] [target]", formatter_class=SortingHelpFormatter)
+    parser.add_argument("-i", "--import", dest="site_list_file", default=None, help="import site list from file")
+    parser.add_argument("-a", "--add", dest="new_site", action="append", help="add an site like 'NAME=URL'")
+    parser.add_argument("-d", "--delete", dest="deleting_site", action="append", help="delete an site")
+    parser.add_argument("-l", "--list", action="store_true", help="list target sites")
+
+    args = parser.parse_args()
 
     config = None
-    config_file = os.path.expanduser("~") + "/." + os.path.basename(__file__)
-    if os.path.exists(config_file):
-        lines = None
-        try:
-            with open(config_file) as fconfig:
-                lines = fconfig.read()
-        except Exception as e:
-            printError("Failed to read config. {}".format(e))
-            exit(errno.ENOENT)
+    lines = None
+    if args.site_list_file is not None:
+        if os.path.exists(args.site_list_file):
+            try:
+                with open(args.site_list_file) as fconfig:
+                    lines = fconfig.read() + "\n"
+            except Exception as e:
+                printError("Failed to read config. {}".format(e))
+                exit(errno.ENOENT)
+
+    if args.new_site is not None:
+        lines = ""
+        for si in args.new_site:
+            lines = lines + si + "\n"
+
+    if lines is not None:
         config = csv.reader(filter(lambda x: len(x.strip()) > 1 and x[0] != "#", lines.splitlines()), delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
-    checker.load(config)
-    checker.update()
-    checker.save()
+
+    checker = WebChecker()
+    checker.load(config, args.deleting_site)
+
+    if args.list is True:
+        checker.list()
+        checker.save()
+    else:
+        checker.update()
+        checker.save()
