@@ -240,10 +240,10 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-c", "--check", action="store_true", help="check sites")
     group.add_argument("-l", "--list", action="store_true", help="list target sites")
-    group.add_argument("-e", "--export", dest="expfile", default=None, help="export site list to file")
-    group.add_argument("-i", "--import", dest="impfile", default=None, help="import site list from file")
-    group.add_argument("-a", "--add", dest="new_site", action="append", help="add an site like 'NAME=URL'")
-    group.add_argument("-d", "--delete", dest="deleting_site", action="append", help="delete an site")
+    group.add_argument("-e", "--export", dest="expfile", metavar="FILE", default=None, help="export site list to file")
+    group.add_argument("-i", "--import", dest="impfile", metavar="FILE", default=None, help="import site list from file")
+    group.add_argument("-a", "--add", dest="new_site", metavar="NAME=URL", action="append", help="add an site")
+    group.add_argument("-d", "--delete", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
 
     args = parser.parse_args()
 
