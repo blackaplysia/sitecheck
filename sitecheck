@@ -226,7 +226,7 @@ class WebChecker:
                     print_info("Updated {}. {}".format(name, url))
                 if "last-modified" in res.headers:
                     last_modified = res.headers["last-modified"]
-                    self.update_summary(resid, "last-modefied", last_modified)
+                    self.update_summary(resid, "last-modified", last_modified)
 
 if __name__ == "__main__":
 
