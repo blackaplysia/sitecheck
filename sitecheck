@@ -103,12 +103,15 @@ class WebChecker:
 
         for resid in self.summaries:
             self.update_summary(resid, "status", -1)
-            try:
-                with open(self.files_dir + "/" + resid) as fc:
-                    contents = fc.read()
-            except Exception as e:
-                print_warning("Filed to load {}: {}".format(self.get_summary_value(resid, "name"), e))
-            self.init_contents(resid, contents)
+            if self.get_summary_value(resid, "hash") is None:
+                self.init_contents(resid)
+            else:
+                try:
+                    with open(self.files_dir + "/" + resid) as fc:
+                        contents = fc.read()
+                except Exception as e:
+                    print_warning("Filed to load {}: {}".format(self.get_summary_value(resid, "name"), e))
+                self.init_contents(resid, contents)
 
         if site_list is not None:
             for site in site_list:
