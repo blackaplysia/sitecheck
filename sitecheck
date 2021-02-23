@@ -14,14 +14,14 @@ from subprocess import PIPE
 
 no_warning = False
 
-def printInfo(msg):
+def print_info(msg):
     print(msg, file=sys.stderr)
 
-def printWarning(msg):
+def print_warning(msg):
     if no_warning is False:
         print(msg, file=sys.stderr)
 
-def printError(msg):
+def print_error(msg):
     print(msg, file=sys.stderr)
 
 def shell(cmdline, intext):
@@ -99,7 +99,7 @@ class WebChecker:
             with open(self.summaries_path) as fcache:
                 self.summaries = json.loads(fcache.read())
         except Exception as e:
-            printWarning("Filed to load summary. {}".format(e))
+            print_warning("Filed to load summary. {}".format(e))
 
         for resid in self.summaries:
             self.update_summary(resid, "status", -1)
@@ -107,7 +107,7 @@ class WebChecker:
                 with open(self.files_dir + "/" + resid) as fc:
                     contents = fc.read()
             except Exception as e:
-                printWarning("Filed to load {}: {}".format(self.get_summary_value(resid, "name"), e))
+                print_warning("Filed to load {}: {}".format(self.get_summary_value(resid, "name"), e))
             self.init_contents(resid, contents)
 
         if site_list is not None:
@@ -133,7 +133,7 @@ class WebChecker:
 
                 resid = self.get_resid(name, url)
                 if resid not in self.summaries:
-                    printInfo("Added {}. {}".format(name, url))
+                    print_info("Added {}. {}".format(name, url))
                     self.init_summary(resid, name, url, -1)
                     self.init_contents(resid)
 
@@ -143,7 +143,7 @@ class WebChecker:
                 if resid is not None:
                     name = self.get_summary_value(resid, "name")
                     url = self.get_summary_value(resid, "url")
-                    printInfo("Removed {}. {}".format(name, url))
+                    print_info("Removed {}. {}".format(name, url))
                     del self.summaries[resid]
                     del self.contents[resid]
 
@@ -153,7 +153,7 @@ class WebChecker:
                 with open(self.summaries_path, "w", encoding="utf-8") as fcache:
                     json.dump(self.summaries, fcache, ensure_ascii=False, indent=4)
             except Exception as e:
-                printWarning("Filed to save summary. {}".format(e))
+                print_warning("Filed to save summary. {}".format(e))
 
             for resid, cache in self.contents.items():
                 if cache["updated"] is True:
@@ -161,7 +161,7 @@ class WebChecker:
                         with open(self.files_dir + "/" + resid, "w") as fc:
                             fc.write(cache["text"])
                     except Exception as e:
-                        printWarning("Filed to save {}: {}".format(self.get_summary_value(resid, "name"), e))
+                        print_warning("Filed to save {}: {}".format(self.get_summary_value(resid, "name"), e))
 
                 if len(self.diffs) > 0:
                     try:
@@ -178,7 +178,7 @@ class WebChecker:
                                 fdiffs.write("{}\n".format(log))
                                 sep = "-" * 64 + "\n"
                     except Exception as e:
-                        printWarning("Failed to save {}. {}".format(self.diffs_path, e))
+                        print_warning("Failed to save {}. {}".format(self.diffs_path, e))
 
     def render(self, html):
         return shell("w3m -T text/html -dump", html)
@@ -192,15 +192,15 @@ class WebChecker:
             try:
                 res = requests.get(url)
             except requests.exceptions.RequestException as e:
-                printWarning("Failed to fetch {}. ({})".format(name, e))
+                print_warning("Failed to fetch {}. ({})".format(name, e))
                 continue
             except Exception as e:
-                printWarning("Failed to fetch {}. ({})".format(name, e))
+                print_warning("Failed to fetch {}. ({})".format(name, e))
                 continue
 
             self.update_summary(resid, "status", res.status_code)
             if res.status_code >= 400:
-                printWarning("Failed to fetch {}. (status={})".format(name, res.status_code))
+                print_warning("Failed to fetch {}. (status={})".format(name, res.status_code))
             else:
                 res.encoding = res.apparent_encoding
                 self.update_summary(resid, "encoding", res.encoding)
@@ -220,7 +220,7 @@ class WebChecker:
                         self.diffs[resid].update({ "log": "\n".join(diff) })
                     self.update_summary(resid, "hash", md5)
                     self.update_contents(resid, res.text)
-                    printInfo("Updated {}. {}".format(name, url))
+                    print_info("Updated {}. {}".format(name, url))
                 if "last-modified" in res.headers:
                     last_modified = res.headers["last-modified"]
                     self.update_summary(resid, "last-modefied", last_modified)
@@ -255,7 +255,7 @@ if __name__ == "__main__":
                 with open(args.impfile) as fconfig:
                     lines = fconfig.read() + "\n"
             except Exception as e:
-                printError("Failed to read config. {}".format(e))
+                print_error("Failed to read config. {}".format(e))
                 exit(errno.ENOENT)
 
     if args.new_site is not None:
@@ -278,7 +278,7 @@ if __name__ == "__main__":
                     url = checker.get_summary_value(resid, "url")
                     writer.writerow([name, url])
         except Exception as e:
-            printError("Failed to write config. {}".format(e))
+            print_error("Failed to write config. {}".format(e))
             exit(errno.ENOENT)
     elif args.list is True:
         checker.list()
