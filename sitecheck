@@ -245,6 +245,10 @@ if __name__ == "__main__":
     group.add_argument("-a", "--add", dest="new_site", metavar="NAME=URL", action="append", help="add an site")
     group.add_argument("-d", "--delete", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
 
+    if len(sys.argv) == 1:
+        print_error(parser.format_usage())
+        exit(0)
+
     args = parser.parse_args()
 
     config = None
