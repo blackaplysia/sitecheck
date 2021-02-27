@@ -246,13 +246,14 @@ if __name__ == "__main__":
             super(SortingHelpFormatter, self).add_arguments(actions)
 
     parser = argparse.ArgumentParser(description="Check updating of web sites", usage="%(prog)s [options] [target]", formatter_class=SortingHelpFormatter)
+    parser.add_argument("-i", "--import", dest="impfile", metavar="FILE", default=None, help="import site list from file")
+    parser.add_argument("-a", "--add", nargs=2, dest="new_site", metavar="NAME URL", action="append", help="add an site")
+    parser.add_argument("-d", "--delete", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-c", "--check", action="store_true", help="check sites")
     group.add_argument("-l", "--list", action="store_true", help="list target sites")
     group.add_argument("-e", "--export", dest="expfile", metavar="FILE", default=None, help="export site list to file")
-    group.add_argument("-i", "--import", dest="impfile", metavar="FILE", default=None, help="import site list from file")
-    group.add_argument("-a", "--add", dest="new_site", metavar="NAME=URL", action="append", help="add an site")
-    group.add_argument("-d", "--delete", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
 
     if len(sys.argv) == 1:
         print_error(parser.format_usage())
@@ -260,27 +261,27 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    config = None
+    site_list = []
     lines = None
     if args.impfile is not None:
-        if os.path.exists(args.impfile):
-            try:
-                with open(args.impfile) as fconfig:
-                    lines = fconfig.read() + "\n"
-            except Exception as e:
-                print_error("Failed to read config. {}".format(e))
-                exit(errno.ENOENT)
+        try:
+            with open(args.impfile) as fconfig:
+                lines = fconfig.read() + "\n"
+        except Exception as e:
+            print_error("Failed to read config. {}".format(e))
+            exit(errno.ENOENT)
+
+        if lines is not None:
+            config = csv.reader(filter(lambda x: len(x.strip()) > 1 and x[0] != "#", lines.splitlines()), delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
+            for site in config:
+                site_list.append(site)
 
     if args.new_site is not None:
-        lines = ""
-        for si in args.new_site:
-            lines = lines + si + "\n"
-
-    if lines is not None:
-        config = csv.reader(filter(lambda x: len(x.strip()) > 1 and x[0] != "#", lines.splitlines()), delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
+        for site in args.new_site:
+            site_list.append(site)
 
     checker = WebChecker()
-    checker.load(config, args.deleting_site)
+    checker.load(site_list, args.deleting_site)
 
     if args.expfile is not None:
         try:
