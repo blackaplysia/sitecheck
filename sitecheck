@@ -42,6 +42,7 @@ class WebChecker:
         self.summaries = {}
         self.contents = {}
         self.diffs = {}
+        self.deleting_list = []
         self.cache_dir = os.path.expanduser("~") + "/.cache/" + os.path.basename(__file__)
         self.files_dir = self.cache_dir + "/files"
         self.current_dir = "."
@@ -89,7 +90,7 @@ class WebChecker:
             url = summary.get("url")
             print("{} {} {}".format(resid, name, url))
 
-    def load(self, site_list, deleting_list):
+    def load(self, site_list, deleting_name_list):
         try:
             with open(self.summaries_path) as fcache:
                 self.summaries = json.loads(fcache.read())
@@ -135,8 +136,8 @@ class WebChecker:
                     self.init_summary(resid, name, url, -1)
                     self.init_contents(resid)
 
-        if deleting_list is not None:
-            for name in deleting_list:
+        if deleting_name_list is not None:
+            for name in deleting_name_list:
                 resid = self.get_resid_by_name(name)
                 if resid is not None:
                     name = self.get_summary_value(resid, "name")
@@ -144,6 +145,7 @@ class WebChecker:
                     print_info("Removed {}. {}".format(name, url))
                     del self.summaries[resid]
                     del self.contents[resid]
+                    self.deleting_list.append(resid)
 
     def save(self):
         if len(self.summaries) > 0:
@@ -182,6 +184,10 @@ class WebChecker:
                                 sep = "-" * 64 + "\n"
                     except Exception as e:
                         print_warning("Failed to save {}. {}".format(self.diffs_path, e))
+            for resid in self.deleting_list:
+                contents = self.files_dir + "/" + resid
+                if os.path.exists(contents):
+                    os.remove(contents)
 
     def render(self, html):
         return shell("w3m -T text/html -dump", html)
