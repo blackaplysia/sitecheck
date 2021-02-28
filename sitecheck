@@ -98,7 +98,6 @@ class WebChecker:
             print_warning("Filed to load summary. {}".format(e))
 
         for resid in self.summaries:
-            self.update_summary(resid, "status", -1)
             if self.get_summary_value(resid, "hash") is None:
                 self.init_contents(resid)
             else:
@@ -192,9 +191,15 @@ class WebChecker:
     def render(self, html):
         return shell("w3m -T text/html -dump", html)
 
-    def update(self):
+    def update(self, do_rerun = False):
         self.diffs = {}
         for resid, summary in self.summaries.items():
+            status = summary.get("status")
+            if do_rerun is True and status > 0 and status < 400:
+                continue
+
+            self.update_summary(resid, "status", -1)
+
             name = summary["name"]
             url = summary["url"]
             res = None
@@ -249,6 +254,7 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--import", dest="impfile", metavar="FILE", default=None, help="import site list from file")
     parser.add_argument("-a", "--add", nargs=2, dest="new_site", metavar="NAME URL", action="append", help="add an site")
     parser.add_argument("-d", "--delete", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
+    parser.add_argument("-r", "--rerun", dest="do_rerun", action="store_true", help="rerun to check sites that has failed to update")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-c", "--check", action="store_true", help="check sites")
@@ -297,7 +303,7 @@ if __name__ == "__main__":
     elif args.list is True:
         checker.list()
     elif args.check is True:
-        checker.update()
+        checker.update(args.do_rerun)
         checker.save()
     else:
         checker.save()
