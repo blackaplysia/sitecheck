@@ -268,10 +268,10 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--import", dest="impfile", metavar="FILE", default=None, help="import site list from file")
     parser.add_argument("-a", "--add", nargs=2, dest="new_site", metavar="NAME URL", action="append", help="add an site")
     parser.add_argument("-d", "--delete", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
-    parser.add_argument("-r", "--rerun", dest="do_rerun", action="store_true", help="rerun to check sites that has failed to update")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-c", "--check", action="store_true", help="check sites")
+    group.add_argument("-C", "--recheck", action="store_true", help="rerun to check sites that has failed to update")
     group.add_argument("-l", "--list", action="store_true", help="list target sites")
     group.add_argument("-e", "--export", dest="expfile", metavar="FILE", default=None, help="export site list to file")
     group.add_argument("-p", "--print", action="store_true", help="print the last updates")
@@ -318,7 +318,9 @@ if __name__ == "__main__":
     elif args.list is True:
         checker.list()
     elif args.check is True:
-        checker.update(args.do_rerun)
+        checker.update()
+    elif args.recheck is True:
+        checker.update(True)
     elif args.print is True:
         checker.print()
 
