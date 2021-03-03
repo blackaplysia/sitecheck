@@ -51,6 +51,7 @@ class WebChecker:
         os.makedirs(self.files_dir, mode=0o777, exist_ok=True)
         self.data_path = self.cache_dir + "/" + os.path.basename(__file__) + ".json"
         self.now = time.time()
+        self.dirty_flag = False
 
     def get_resid(self, name, url):
         resid = hashlib.md5(url.encode()).hexdigest()
@@ -140,6 +141,7 @@ class WebChecker:
                     print_info("Added {}. {}".format(name, url))
                     self.init_summary(resid, name, url, -1)
                     self.init_contents(resid)
+                    self.dirty_flag = True
 
         if deleting_name_list is not None:
             for name in deleting_name_list:
@@ -151,8 +153,13 @@ class WebChecker:
                     del self.summaries[resid]
                     del self.contents[resid]
                     self.deleting_list.append(resid)
+                    self.dirty_flag = True
 
     def save(self):
+        if self.dirty_flag is False:
+            print("Nothing is done")
+            return
+
         if len(self.summaries) > 0:
             self.properties["updated"] = self.now
             if os.path.isdir(self.cache_dir):
@@ -244,6 +251,7 @@ class WebChecker:
                     self.update_contents(resid, res.text)
                     self.update_summary(resid, "updated", self.now)
                     print_info("Updated {}. {}".format(name, url))
+                    self.dirty_flag = True
 
 if __name__ == "__main__":
 
@@ -311,8 +319,7 @@ if __name__ == "__main__":
         checker.list()
     elif args.check is True:
         checker.update(args.do_rerun)
-        checker.save()
     elif args.print is True:
         checker.print()
-    else:
-        checker.save()
+
+    checker.save()
