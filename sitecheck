@@ -10,6 +10,7 @@ import requests
 import shutil
 import subprocess
 import sys
+import time
 from subprocess import PIPE
 
 no_warning = False
@@ -39,17 +40,17 @@ def shell(cmdline, intext):
 class WebChecker:
 
     def __init__(self):
+        self.properties = {}
         self.summaries = {}
         self.contents = {}
-        self.diffs = {}
         self.deleting_list = []
         self.cache_dir = os.path.expanduser("~") + "/.cache/" + os.path.basename(__file__)
         self.files_dir = self.cache_dir + "/files"
         self.current_dir = "."
         os.makedirs(self.cache_dir, mode=0o777, exist_ok=True)
         os.makedirs(self.files_dir, mode=0o777, exist_ok=True)
-        self.summaries_path = self.cache_dir + "/summaries.json"
-        self.diffs_path = self.current_dir + "/diffs.log"
+        self.data_path = self.cache_dir + "/" + os.path.basename(__file__) + ".json"
+        self.now = time.time()
 
     def get_resid(self, name, url):
         resid = hashlib.md5(url.encode()).hexdigest()
@@ -67,6 +68,9 @@ class WebChecker:
 
     def get_summary_value(self, resid, key):
         return self.summaries[resid].get(key)
+
+    def get_property_value(self, key):
+        return self.properties.get(key)
 
     def init_summary(self, resid, name = None, url = None, status = -1):
         if name is None:
@@ -92,8 +96,10 @@ class WebChecker:
 
     def load(self, site_list, deleting_name_list):
         try:
-            with open(self.summaries_path) as fcache:
-                self.summaries = json.loads(fcache.read())
+            with open(self.data_path) as fcache:
+                data = json.loads(fcache.read())
+                self.properties = data.get("property")
+                self.summaries = data.get("summary")
         except Exception as e:
             print_warning("Filed to load summary. {}".format(e))
 
@@ -148,14 +154,16 @@ class WebChecker:
 
     def save(self):
         if len(self.summaries) > 0:
+            self.properties["updated"] = self.now
             if os.path.isdir(self.cache_dir):
                 cache_backup_dir = self.cache_dir + ".bak"
                 if os.path.isdir(cache_backup_dir):
                     shutil.rmtree(cache_backup_dir)
                 shutil.copytree(self.cache_dir, cache_backup_dir)
             try:
-                with open(self.summaries_path, "w", encoding="utf-8") as fcache:
-                    json.dump(self.summaries, fcache, ensure_ascii=False, indent=4)
+                with open(self.data_path, "w", encoding="utf-8") as fcache:
+                    data = { "property": self.properties, "summary": self.summaries }
+                    json.dump(data, fcache, ensure_ascii=False, indent=4)
             except Exception as e:
                 print_warning("Filed to save summary. {}".format(e))
 
@@ -167,32 +175,27 @@ class WebChecker:
                     except Exception as e:
                         print_warning("Filed to save {}: {}".format(self.get_summary_value(resid, "name"), e))
 
-                if len(self.diffs) > 0:
-                    try:
-                        with open(self.diffs_path, "w", encoding="utf-8") as fdiffs:
-                            sep = None
-                            for resid, diff in self.diffs.items():
-                                name = diff.get("name")
-                                url = diff.get("url")
-                                log = diff.get("log")
-                                if sep is not None:
-                                    fdiffs.write(sep)
-                                fdiffs.write("{} ({})\n".format(name, resid))
-                                fdiffs.write("{}\n".format(url))
-                                fdiffs.write("{}\n".format(log))
-                                sep = "-" * 64 + "\n"
-                    except Exception as e:
-                        print_warning("Failed to save {}. {}".format(self.diffs_path, e))
             for resid in self.deleting_list:
                 contents = self.files_dir + "/" + resid
                 if os.path.exists(contents):
                     os.remove(contents)
 
+    def print(self):
+        if len(self.summaries) > 0:
+            now = self.get_property_value("updated")
+            sep = None
+            for resid, summary in self.summaries.items():
+                updated = self.get_summary_value(resid, "updated")
+                if updated is not None and float(updated) >= float(now):
+                    if sep is not None:
+                        print(sep)
+                    print(self.get_summary_value(resid, "log"))
+                    sep = "-" * 72
+
     def render(self, html):
         return shell("w3m -T text/html -dump", html)
 
     def update(self, do_rerun = False):
-        self.diffs = {}
         for resid, summary in self.summaries.items():
             status = summary.get("status")
             if do_rerun is True and status > 0 and status < 400:
@@ -220,24 +223,27 @@ class WebChecker:
                 self.update_summary(resid, "encoding", res.encoding)
                 md5 = hashlib.md5(res.text.encode()).hexdigest()
                 if "hash" not in summary or md5 != summary["hash"]:
-                    self.diffs.update({ resid: { "name": name, "url": url }})
+                    diff_header_lines = []
+                    diff_header_lines.append("name: " + name)
+                    diff_header_lines.append("url: " + url)
+                    diff_header_lines.append("resid: " + resid)
+                    diff_header_lines.append("hash: " + md5)
+                    diff = "\n".join(diff_header_lines) + "\n"
                     if self.contents[resid]["text"] is None:
-                        self.diffs[resid].update({ "log": "Initial update." })
+                        diff = diff + "Initial update"
+                        self.update_summary(resid, "log", diff)
                     else:
                         old_lines = self.render(self.contents[resid]["text"]).splitlines()
                         new_lines = self.render(res.text).splitlines()
                         diff_lines = difflib.context_diff(old_lines, new_lines)
-                        diff = []
                         for l in diff_lines:
                             if l[0] == "+" or l[0] == "!":
-                                diff.append(l)
-                        self.diffs[resid].update({ "log": "\n".join(diff) })
+                                diff = diff + "> " + l + "\n"
+                        self.update_summary(resid, "log", diff )
                     self.update_summary(resid, "hash", md5)
                     self.update_contents(resid, res.text)
+                    self.update_summary(resid, "updated", self.now)
                     print_info("Updated {}. {}".format(name, url))
-                if "last-modified" in res.headers:
-                    last_modified = res.headers["last-modified"]
-                    self.update_summary(resid, "last-modified", last_modified)
 
 if __name__ == "__main__":
 
@@ -260,6 +266,7 @@ if __name__ == "__main__":
     group.add_argument("-c", "--check", action="store_true", help="check sites")
     group.add_argument("-l", "--list", action="store_true", help="list target sites")
     group.add_argument("-e", "--export", dest="expfile", metavar="FILE", default=None, help="export site list to file")
+    group.add_argument("-p", "--print", action="store_true", help="print the last updates")
 
     if len(sys.argv) == 1:
         print_error(parser.format_usage())
@@ -305,5 +312,7 @@ if __name__ == "__main__":
     elif args.check is True:
         checker.update(args.do_rerun)
         checker.save()
+    elif args.print is True:
+        checker.print()
     else:
         checker.save()
