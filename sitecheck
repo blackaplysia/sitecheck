@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime
 from subprocess import PIPE
 
 no_warning = False
@@ -89,11 +90,15 @@ class WebChecker:
         self.contents.update({ resid: {}})
         self.update_contents(resid, text, updated=False)
 
-    def list(self):
+    def list(self, time_isoformat = None):
         for resid, summary in self.summaries.items():
             name = summary.get("name")
             url = summary.get("url")
-            print("{} {} {}".format(resid, name, url))
+            updated = summary.get("updated")
+            if updated is not None:
+                updated = datetime.utcfromtimestamp(updated).isoformat()
+            if time_isoformat is None or time_isoformat == updated:
+                print("{} {} {} {}".format(resid, updated, name, url))
 
     def load(self, site_list, deleting_name_list):
         try:
@@ -187,13 +192,16 @@ class WebChecker:
                 if os.path.exists(contents):
                     os.remove(contents)
 
-    def print(self):
+    def print(self, time_isoformat = None):
+        if time_isoformat is None:
+            time_isoformat = datetime.utcfromtimestamp(self.get_property_value("updated")).isoformat()
         if len(self.summaries) > 0:
-            now = self.get_property_value("updated")
             sep = None
             for resid, summary in self.summaries.items():
                 updated = self.get_summary_value(resid, "updated")
-                if updated is not None and float(updated) >= float(now):
+                if updated is not None:
+                    updated = datetime.utcfromtimestamp(updated).isoformat()
+                if time_isoformat is None or time_isoformat == updated:
                     if sep is not None:
                         print(sep)
                     print(self.get_summary_value(resid, "log"))
@@ -273,8 +281,10 @@ if __name__ == "__main__":
     group.add_argument("-c", "--check", action="store_true", help="check sites")
     group.add_argument("-C", "--recheck", action="store_true", help="rerun to check sites that has failed to update")
     group.add_argument("-l", "--list", action="store_true", help="list target sites")
+    group.add_argument("-L", "--list-at", metavar="TIME", help="list target sites with last update time")
     group.add_argument("-e", "--export", dest="expfile", metavar="FILE", default=None, help="export site list to file")
     group.add_argument("-p", "--print", action="store_true", help="print the last updates")
+    group.add_argument("-P", "--print-at", metavar="TIME", help="print with last update time")
 
     if len(sys.argv) == 1:
         print_error(parser.format_usage())
@@ -317,11 +327,15 @@ if __name__ == "__main__":
             exit(errno.ENOENT)
     elif args.list is True:
         checker.list()
+    elif args.list_at is not None:
+        checker.list(args.list_at)
     elif args.check is True:
         checker.update()
     elif args.recheck is True:
         checker.update(True)
     elif args.print is True:
         checker.print()
+    elif args.print_at is not None:
+        checker.print(args.print_at)
 
     checker.save()
