@@ -270,7 +270,7 @@ class WebChecker:
                     diff_header_lines.append("url: " + url)
                     diff_header_lines.append("resid: " + resid)
                     diff_header_lines.append("hash: " + md5)
-                    diff_header_lines.append("updated: " + self.now)
+                    diff_header_lines.append("updated: " + datetime.utcfromtimestamp(self.now).isoformat())
                     diff = "\n".join(diff_header_lines) + "\n"
                     if self.contents[resid]["text"] is None:
                         diff = diff + "Initial update"
