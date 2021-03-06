@@ -45,6 +45,8 @@ class WebChecker:
         self.properties = {}
         self.summaries = {}
         self.contents = {}
+        self.names = {}
+        self.isotimestamps ={}
         self.deleting_list = []
         self.cache_dir = os.path.expanduser("~") + "/.cache/" + os.path.basename(__file__)
         self.files_dir = self.cache_dir + "/files"
@@ -65,6 +67,23 @@ class WebChecker:
                 return resid
         else:
             return None
+
+    def get_resid_list(self, cond = None):
+        resids = []
+        if cond is None:
+            resids = self.summaries.keys()
+        elif cond.lower() == "all":
+            resids = self.summaries.keys()
+        elif cond.lower() == "last":
+            if len(self.isotimestamps) > 0:
+                s = sorted(self.isotimestamps, reverse=True)
+                if len(s) > 0:
+                    resids.extend(self.isotimestamps.get(s[0]))
+        elif cond in self.names:
+            resids.append(self.names.get(cond))
+        elif cond in self.isotimestamps:
+            resids.extend(self.isotimestamps.get(cond))
+        return resids
 
     def update_summary(self, resid, key, value):
         self.summaries[resid].update({ key: value })
@@ -91,15 +110,14 @@ class WebChecker:
         self.contents.update({ resid: {}})
         self.update_contents(resid, text, updated=False)
 
-    def list(self, time_isoformat = None):
-        for resid, summary in self.summaries.items():
-            name = summary.get("name")
-            url = summary.get("url")
-            updated = summary.get("updated")
+    def list(self, cond = None):
+        for resid in self.get_resid_list(cond):
+            name = self.get_summary_value(resid, "name")
+            url = self.get_summary_value(resid, "url")
+            updated = self.get_summary_value(resid, "updated")
             if updated is not None:
                 updated = datetime.utcfromtimestamp(updated).isoformat()
-            if time_isoformat is None or time_isoformat == updated:
-                print("{} {} {} {}".format(resid, updated, name, url))
+            print("{} {} {} {}".format(resid, updated, name, url))
 
     def load(self, site_list, deleting_name_list):
         try:
@@ -161,6 +179,16 @@ class WebChecker:
                     self.deleting_list.append(resid)
                     self.dirty_flag = True
 
+        for resid, summary in self.summaries.items():
+            name = summary.get("name")
+            isotimestamp = datetime.utcfromtimestamp(summary.get("updated")).isoformat()
+            self.names.update({ name:  resid })
+            if isotimestamp is not None:
+                if isotimestamp not in self.isotimestamps:
+                    self.isotimestamps.update({ isotimestamp: [resid] })
+                else:
+                    self.isotimestamps[isotimestamp].append(resid)
+
     def save(self):
         if self.dirty_flag is False:
             print("Nothing is done")
@@ -193,20 +221,17 @@ class WebChecker:
                 if os.path.exists(contents):
                     os.remove(contents)
 
-    def print(self, time_isoformat = None):
-        if time_isoformat is None:
-            time_isoformat = datetime.utcfromtimestamp(self.get_property_value("updated")).isoformat()
+    def print(self, cond = None):
         if len(self.summaries) > 0:
             sep = None
-            for resid, summary in self.summaries.items():
+            for resid in self.get_resid_list(cond):
                 updated = self.get_summary_value(resid, "updated")
                 if updated is not None:
                     updated = datetime.utcfromtimestamp(updated).isoformat()
-                if time_isoformat is None or time_isoformat == updated:
-                    if sep is not None:
-                        print(sep)
-                    print(self.get_summary_value(resid, "log"))
-                    sep = "-" * 72
+                if sep is not None:
+                    print(sep)
+                print(self.get_summary_value(resid, "log"))
+                sep = "-" * 72
 
     def render(self, html):
         text = shell("w3m -T text/html -cols 256 -dump", html)
@@ -245,6 +270,7 @@ class WebChecker:
                     diff_header_lines.append("url: " + url)
                     diff_header_lines.append("resid: " + resid)
                     diff_header_lines.append("hash: " + md5)
+                    diff_header_lines.append("updated: " + self.now)
                     diff = "\n".join(diff_header_lines) + "\n"
                     if self.contents[resid]["text"] is None:
                         diff = diff + "Initial update"
@@ -276,17 +302,15 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Check updating of web sites", usage="%(prog)s [options] [target]", formatter_class=SortingHelpFormatter)
     parser.add_argument("-i", "--import", dest="impfile", metavar="FILE", default=None, help="import site list from file")
-    parser.add_argument("-a", "--add", nargs=2, dest="new_site", metavar="NAME URL", action="append", help="add an site")
+    parser.add_argument("-a", "--add", nargs=2, dest="new_site", metavar=("NAME", "URL"), action="append", help="add an site")
     parser.add_argument("-d", "--delete", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-c", "--check", action="store_true", help="check sites")
     group.add_argument("-C", "--recheck", action="store_true", help="rerun to check sites that has failed to update")
-    group.add_argument("-l", "--list", action="store_true", help="list target sites")
-    group.add_argument("-L", "--list-at", metavar="TIME", help="list target sites with last update time")
+    group.add_argument("-l", "--list", nargs="?", metavar="COND", help="list target sites (cond: ALL|LAST|name|time)")
     group.add_argument("-e", "--export", dest="expfile", metavar="FILE", default=None, help="export site list to file")
-    group.add_argument("-p", "--print", action="store_true", help="print the last updates")
-    group.add_argument("-P", "--print-at", metavar="TIME", help="print with last update time")
+    group.add_argument("-p", "--print", nargs="?", metavar="COND", help="print the last updates (cond: ALL|LAST|name|time)")
 
     if len(sys.argv) == 1:
         print_error(parser.format_usage())
@@ -327,17 +351,13 @@ if __name__ == "__main__":
         except Exception as e:
             print_error("Failed to write config. {}".format(e))
             exit(errno.ENOENT)
-    elif args.list is True:
-        checker.list()
-    elif args.list_at is not None:
-        checker.list(args.list_at)
     elif args.check is True:
         checker.update()
     elif args.recheck is True:
         checker.update(True)
-    elif args.print is True:
-        checker.print()
-    elif args.print_at is not None:
-        checker.print(args.print_at)
+    elif args.list is not None:
+        checker.list(args.list)
+    elif args.print is not None:
+        checker.print(args.print)
 
     checker.save()
