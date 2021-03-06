@@ -209,7 +209,7 @@ class WebChecker:
                     sep = "-" * 72
 
     def render(self, html):
-        text = shell("w3m -T text/html -dump", html)
+        text = shell("w3m -T text/html -cols 256 -dump", html)
         return re.sub("[ 　]+", " ", text)
 
     def update(self, do_rerun = False):
