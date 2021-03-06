@@ -6,6 +6,7 @@ import errno
 import hashlib
 import json
 import os
+import re
 import requests
 import shutil
 import subprocess
@@ -208,7 +209,8 @@ class WebChecker:
                     sep = "-" * 72
 
     def render(self, html):
-        return shell("w3m -T text/html -dump", html)
+        text = shell("w3m -T text/html -dump", html)
+        return re.sub("[ 　]+", " ", text)
 
     def update(self, do_rerun = False):
         for resid, summary in self.summaries.items():
@@ -250,9 +252,9 @@ class WebChecker:
                     else:
                         old_lines = self.render(self.contents[resid]["text"]).splitlines()
                         new_lines = self.render(res.text).splitlines()
-                        diff_lines = difflib.context_diff(old_lines, new_lines)
+                        diff_lines = difflib.unified_diff(old_lines, new_lines)
                         for l in diff_lines:
-                            if l[0] == "+" or l[0] == "!":
+                            if l[0] == "+" and not re.match("^\++\s$", l):
                                 diff = diff + "> " + l + "\n"
                         self.update_summary(resid, "log", diff )
                     self.update_summary(resid, "hash", md5)
