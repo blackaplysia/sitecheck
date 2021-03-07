@@ -5,6 +5,7 @@ import difflib
 import errno
 import hashlib
 import json
+import logging
 import os
 import re
 import requests
@@ -15,17 +16,7 @@ import time
 from datetime import datetime
 from subprocess import PIPE
 
-no_warning = False
-
-def print_info(msg):
-    print(msg, file=sys.stderr)
-
-def print_warning(msg):
-    if no_warning is False:
-        print(msg, file=sys.stderr)
-
-def print_error(msg):
-    print(msg, file=sys.stderr)
+logger = logging.getLogger()
 
 def shell(cmdline, intext):
     proc = subprocess.Popen(cmdline, shell=True, stdin=PIPE, stdout=PIPE)
@@ -110,15 +101,6 @@ class WebChecker:
         self.contents.update({ resid: {}})
         self.update_contents(resid, text, updated=False)
 
-    def list(self, cond = None):
-        for resid in self.get_resid_list(cond):
-            name = self.get_summary_value(resid, "name")
-            url = self.get_summary_value(resid, "url")
-            updated = self.get_summary_value(resid, "updated")
-            if updated is not None:
-                updated = datetime.utcfromtimestamp(updated).isoformat()
-            print("{} {} {} {}".format(resid, updated, name, url))
-
     def load(self, site_list, deleting_name_list):
         try:
             with open(self.data_path) as fcache:
@@ -126,7 +108,8 @@ class WebChecker:
                 self.properties = data.get("property")
                 self.summaries = data.get("summary")
         except Exception as e:
-            print_warning("Filed to load summary. {}".format(e))
+            logger.warning("Failed to load summary")
+            logger.debug(e)
 
         for resid in self.summaries:
             if self.get_summary_value(resid, "hash") is None:
@@ -136,7 +119,8 @@ class WebChecker:
                     with open(self.files_dir + "/" + resid) as fc:
                         contents = fc.read()
                 except Exception as e:
-                    print_warning("Filed to load {}: {}".format(self.get_summary_value(resid, "name"), e))
+                    logger_warning("Failed to load {}".format(self.get_summary_value(resid, "name")))
+                    logger_debug(e)
                 self.init_contents(resid, contents)
 
         if site_list is not None:
@@ -162,7 +146,7 @@ class WebChecker:
 
                 resid = self.get_resid(name, url)
                 if resid not in self.summaries:
-                    print_info("Added {}. {}".format(name, url))
+                    logger.info("Added {} {}".format(name, url))
                     self.init_summary(resid, name, url, -1)
                     self.init_contents(resid)
                     self.dirty_flag = True
@@ -173,7 +157,7 @@ class WebChecker:
                 if resid is not None:
                     name = self.get_summary_value(resid, "name")
                     url = self.get_summary_value(resid, "url")
-                    print_info("Removed {}. {}".format(name, url))
+                    logger.info("Removed {} {}".format(name, url))
                     del self.summaries[resid]
                     del self.contents[resid]
                     self.deleting_list.append(resid)
@@ -193,36 +177,45 @@ class WebChecker:
                     self.isotimestamps[isotimestamp].append(resid)
 
     def save(self):
-        if self.dirty_flag is False:
-            print("Nothing is done")
-            return
+        if self.dirty_flag is True:
+            if len(self.summaries) > 0:
+                self.properties["updated"] = self.now
+                if os.path.isdir(self.cache_dir):
+                    cache_backup_dir = self.cache_dir + ".bak"
+                    if os.path.isdir(cache_backup_dir):
+                        shutil.rmtree(cache_backup_dir)
+                    shutil.copytree(self.cache_dir, cache_backup_dir)
+                try:
+                    with open(self.data_path, "w", encoding="utf-8") as fcache:
+                        data = { "property": self.properties, "summary": self.summaries }
+                        json.dump(data, fcache, ensure_ascii=False, indent=4)
+                except Exception as e:
+                    logger.warning("Failed to save summary")
+                    logger.debug(e)
 
+                for resid, cache in self.contents.items():
+                    if cache["updated"] is True:
+                        try:
+                            with open(self.files_dir + "/" + resid, "w") as fc:
+                                fc.write(cache["text"])
+                        except Exception as e:
+                            logger.warning("Failed to save {}".format(self.get_summary_value(resid, "name")))
+                            logger.debug(e)
+
+                for resid in self.deleting_list:
+                    contents = self.files_dir + "/" + resid
+                    if os.path.exists(contents):
+                        os.remove(contents)
+
+    def list(self, cond = None):
         if len(self.summaries) > 0:
-            self.properties["updated"] = self.now
-            if os.path.isdir(self.cache_dir):
-                cache_backup_dir = self.cache_dir + ".bak"
-                if os.path.isdir(cache_backup_dir):
-                    shutil.rmtree(cache_backup_dir)
-                shutil.copytree(self.cache_dir, cache_backup_dir)
-            try:
-                with open(self.data_path, "w", encoding="utf-8") as fcache:
-                    data = { "property": self.properties, "summary": self.summaries }
-                    json.dump(data, fcache, ensure_ascii=False, indent=4)
-            except Exception as e:
-                print_warning("Filed to save summary. {}".format(e))
-
-            for resid, cache in self.contents.items():
-                if cache["updated"] is True:
-                    try:
-                        with open(self.files_dir + "/" + resid, "w") as fc:
-                            fc.write(cache["text"])
-                    except Exception as e:
-                        print_warning("Filed to save {}: {}".format(self.get_summary_value(resid, "name"), e))
-
-            for resid in self.deleting_list:
-                contents = self.files_dir + "/" + resid
-                if os.path.exists(contents):
-                    os.remove(contents)
+            for resid in self.get_resid_list(cond):
+                name = self.get_summary_value(resid, "name")
+                url = self.get_summary_value(resid, "url")
+                updated = self.get_summary_value(resid, "updated")
+                if updated is not None:
+                    updated = datetime.utcfromtimestamp(updated).isoformat()
+                print("{} {} {} {}".format(resid, updated, name, url))
 
     def print(self, cond = None):
         if len(self.summaries) > 0:
@@ -241,56 +234,59 @@ class WebChecker:
         return re.sub("[ 　]+", " ", text)
 
     def update(self, do_rerun = False):
-        for resid, summary in self.summaries.items():
-            status = summary.get("status")
-            if do_rerun is True and status > 0 and status < 400:
-                continue
+        if len(self.summaries) > 0:
+            for resid, summary in self.summaries.items():
+                status = summary.get("status")
+                if do_rerun is True and status > 0 and status < 400:
+                    continue
 
-            self.update_summary(resid, "status", -1)
+                self.update_summary(resid, "status", -1)
 
-            name = summary["name"]
-            url = summary["url"]
-            res = None
-            try:
-                res = requests.get(url)
-            except requests.exceptions.RequestException as e:
-                print_warning("Failed to fetch {}. ({})".format(name, e))
-                continue
-            except Exception as e:
-                print_warning("Failed to fetch {}. ({})".format(name, e))
-                continue
+                name = summary["name"]
+                url = summary["url"]
+                res = None
+                try:
+                    res = requests.get(url)
+                except requests.exceptions.RequestException as e:
+                    logger.warning("Failed to fetch {}".format(name))
+                    logger.debug(e)
+                    continue
+                except Exception as e:
+                    logger.warning("Failed to fetch {}".format(name))
+                    logger.debug(e)
+                    continue
 
-            self.update_summary(resid, "status", res.status_code)
-            if res.status_code >= 400:
-                print_warning("Failed to fetch {}. (status={})".format(name, res.status_code))
-            else:
-                res.encoding = res.apparent_encoding
-                self.update_summary(resid, "encoding", res.encoding)
-                md5 = hashlib.md5(res.text.encode()).hexdigest()
-                if "hash" not in summary or md5 != summary["hash"]:
-                    diff_header_lines = []
-                    diff_header_lines.append("name: " + name)
-                    diff_header_lines.append("url: " + url)
-                    diff_header_lines.append("resid: " + resid)
-                    diff_header_lines.append("hash: " + md5)
-                    diff_header_lines.append("updated: " + datetime.utcfromtimestamp(self.now).isoformat())
-                    diff = "\n".join(diff_header_lines) + "\n"
-                    if self.contents[resid]["text"] is None:
-                        diff = diff + "Initial update"
-                        self.update_summary(resid, "log", diff)
-                    else:
-                        old_lines = self.render(self.contents[resid]["text"]).splitlines()
-                        new_lines = self.render(res.text).splitlines()
-                        diff_lines = difflib.unified_diff(old_lines, new_lines)
-                        for l in diff_lines:
-                            if l[0] == "+" and not re.match("^\++\s$", l):
-                                diff = diff + "> " + l + "\n"
-                        self.update_summary(resid, "log", diff )
-                    self.update_summary(resid, "hash", md5)
-                    self.update_contents(resid, res.text)
-                    self.update_summary(resid, "updated", self.now)
-                    print_info("Updated {}. {}".format(name, url))
-                    self.dirty_flag = True
+                self.update_summary(resid, "status", res.status_code)
+                if res.status_code >= 400:
+                    logger.warning("Failed to fetch {}".format(name), "Status code={}".format(res.status_code))
+                else:
+                    res.encoding = res.apparent_encoding
+                    self.update_summary(resid, "encoding", res.encoding)
+                    md5 = hashlib.md5(res.text.encode()).hexdigest()
+                    if "hash" not in summary or md5 != summary["hash"]:
+                        diff_header_lines = []
+                        diff_header_lines.append("name: " + name)
+                        diff_header_lines.append("url: " + url)
+                        diff_header_lines.append("resid: " + resid)
+                        diff_header_lines.append("hash: " + md5)
+                        diff_header_lines.append("updated: " + datetime.utcfromtimestamp(self.now).isoformat())
+                        diff = "\n".join(diff_header_lines) + "\n"
+                        if self.contents[resid]["text"] is None:
+                            diff = diff + "Initial update"
+                            self.update_summary(resid, "log", diff)
+                        else:
+                            old_lines = self.render(self.contents[resid]["text"]).splitlines()
+                            new_lines = self.render(res.text).splitlines()
+                            diff_lines = difflib.unified_diff(old_lines, new_lines)
+                            for l in diff_lines:
+                                if l[0] == "+" and not re.match("^\++\s$", l):
+                                    diff = diff + "> " + l + "\n"
+                            self.update_summary(resid, "log", diff )
+                        self.update_summary(resid, "hash", md5)
+                        self.update_contents(resid, res.text)
+                        self.update_summary(resid, "updated", self.now)
+                        logger.info("Updated {}".format(name))
+                        self.dirty_flag = True
 
 class SiteVecIterator(object):
     def __init__(self, checker, cond = None):
@@ -326,6 +322,7 @@ if __name__ == "__main__":
     parser.add_argument("-i", dest="impfile", action="append", nargs="?", metavar="FILE", help="import site list from file")
     parser.add_argument("-a", dest="new_site", nargs=2, metavar=("NAME", "URL"), action="append", help="add an site")
     parser.add_argument("-d", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
+    parser.add_argument("--log", action="store_true", help="debug output to log file")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-e", dest="expfile", action="append", nargs="?", metavar="FILE", help="export site list to file")
@@ -335,10 +332,20 @@ if __name__ == "__main__":
     group.add_argument("-p", dest="print", action="append", nargs="?", metavar="COND", help="print the last updates (cond: ALL|LAST|name|time)")
 
     if len(sys.argv) == 1:
-        print_error(parser.format_usage())
+        print(parser.format_usage(), file=sys.stderr)
         exit(0)
 
     args = parser.parse_args()
+
+    log_file_format = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
+    log_console_format = "%(levelname)s: %(message)s"
+    if args.log is True:
+        logging.basicConfig(filename=os.path.basename(__file__) + ".log", format=log_file_format, level=logging.DEBUG)
+        logging.getLogger("chardet.charsetprober").setLevel(level=logging.INFO)
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter(log_console_format))
+    console.setLevel(logging.INFO)
+    logger.addHandler(console)
 
     site_list = []
     lines = None
@@ -352,7 +359,8 @@ if __name__ == "__main__":
             if fconfig != sys.stdin:
                 fconfig.close()
         except Exception as e:
-            print_error("Failed to read config. {}".format(e))
+            logger.critical("Failed to read config")
+            logger.debug(e)
             exit(errno.ENOENT)
 
         if lines is not None:
@@ -379,7 +387,8 @@ if __name__ == "__main__":
             if fexp != sys.stdout:
                 fexp.close()
         except Exception as e:
-            print_error("Failed to write config. {}".format(e))
+            logger.critical("Failed to write config")
+            logger.debug(e)
             exit(errno.ENOENT)
     elif args.check is True:
         checker.update()
