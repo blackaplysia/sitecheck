@@ -322,7 +322,7 @@ if __name__ == "__main__":
             actions = sorted(actions, key=attrgetter("option_strings"))
             super(SortingHelpFormatter, self).add_arguments(actions)
 
-    parser = argparse.ArgumentParser(description="Check updating of web sites", usage="%(prog)s [options] [target]", formatter_class=SortingHelpFormatter)
+    parser = argparse.ArgumentParser(description="Check updating of web sites", formatter_class=SortingHelpFormatter)
     parser.add_argument("-i", dest="impfile", action="append", nargs="?", metavar="FILE", help="import site list from file")
     parser.add_argument("-a", dest="new_site", nargs=2, metavar=("NAME", "URL"), action="append", help="add an site")
     parser.add_argument("-d", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
