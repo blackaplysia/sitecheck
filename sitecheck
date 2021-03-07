@@ -306,11 +306,11 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--delete", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
 
     group = parser.add_mutually_exclusive_group()
+    group.add_argument("-e", "--export", dest="expfile", metavar="FILE", default=None, help="export site list to file")
     group.add_argument("-c", "--check", action="store_true", help="check sites")
     group.add_argument("-C", "--recheck", action="store_true", help="rerun to check sites that has failed to update")
-    group.add_argument("-l", "--list", nargs="?", metavar="COND", help="list target sites (cond: ALL|LAST|name|time)")
-    group.add_argument("-e", "--export", dest="expfile", metavar="FILE", default=None, help="export site list to file")
-    group.add_argument("-p", "--print", nargs="?", metavar="COND", help="print the last updates (cond: ALL|LAST|name|time)")
+    group.add_argument("-l", "--list", action="append", nargs="?", metavar="COND", help="list target sites (cond: ALL|LAST|name|time)")
+    group.add_argument("-p", "--print", action="append", nargs="?", metavar="COND", help="print the last updates (cond: ALL|LAST|name|time)")
 
     if len(sys.argv) == 1:
         print_error(parser.format_usage())
@@ -356,8 +356,8 @@ if __name__ == "__main__":
     elif args.recheck is True:
         checker.update(True)
     elif args.list is not None:
-        checker.list(args.list)
+        checker.list(args.list[0])
     elif args.print is not None:
-        checker.print(args.print)
+        checker.print(args.print[0])
 
     checker.save()
