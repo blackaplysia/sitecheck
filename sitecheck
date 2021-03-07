@@ -181,7 +181,10 @@ class WebChecker:
 
         for resid, summary in self.summaries.items():
             name = summary.get("name")
-            isotimestamp = datetime.utcfromtimestamp(summary.get("updated")).isoformat()
+            updated = summary.get("updated")
+            isotimestamp = None
+            if updated is not None:
+                isotimestamp = datetime.utcfromtimestamp(updated).isoformat()
             self.names.update({ name:  resid })
             if isotimestamp is not None:
                 if isotimestamp not in self.isotimestamps:
@@ -320,12 +323,12 @@ if __name__ == "__main__":
             super(SortingHelpFormatter, self).add_arguments(actions)
 
     parser = argparse.ArgumentParser(description="Check updating of web sites", usage="%(prog)s [options] [target]", formatter_class=SortingHelpFormatter)
-    parser.add_argument("-i", dest="impfile", metavar="FILE", default=None, help="import site list from file")
+    parser.add_argument("-i", dest="impfile", action="append", nargs="?", metavar="FILE", help="import site list from file")
     parser.add_argument("-a", dest="new_site", nargs=2, metavar=("NAME", "URL"), action="append", help="add an site")
     parser.add_argument("-d", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("-e", dest="expfile", metavar="FILE", default=None, help="export site list to file")
+    group.add_argument("-e", dest="expfile", action="append", nargs="?", metavar="FILE", help="export site list to file")
     group.add_argument("-c", dest="check", action="store_true", help="check sites")
     group.add_argument("-C", dest="recheck", action="store_true", help="rerun to check sites that has failed to update")
     group.add_argument("-l", dest="list", action="append", nargs="?", metavar="COND", help="list target sites (cond: ALL|LAST|name|time)")
@@ -340,9 +343,14 @@ if __name__ == "__main__":
     site_list = []
     lines = None
     if args.impfile is not None:
+        fconfig = sys.stdin
         try:
-            with open(args.impfile) as fconfig:
-                lines = fconfig.read() + "\n"
+            fn = args.impfile[0]
+            if fn is not None:
+                fconfig = open(fn)
+            lines = fconfig.read() + "\n"
+            if fconfig != sys.stdin:
+                fconfig.close()
         except Exception as e:
             print_error("Failed to read config. {}".format(e))
             exit(errno.ENOENT)
@@ -360,11 +368,16 @@ if __name__ == "__main__":
     checker.load(site_list, args.deleting_site)
 
     if args.expfile is not None:
+        fexp = sys.stdout
         try:
-            with open(args.expfile, "w", newline="") as fexp:
-                writer = csv.writer(fexp, delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
-                for v in SiteVecIterator(checker):
-                    writer.writerow(v)
+            fn = args.expfile[0]
+            if fn is not None:
+                fexp = open(fn, "w", newline="")
+            writer = csv.writer(fexp, delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
+            for v in SiteVecIterator(checker):
+                writer.writerow(v)
+            if fexp != sys.stdout:
+                fexp.close()
         except Exception as e:
             print_error("Failed to write config. {}".format(e))
             exit(errno.ENOENT)
