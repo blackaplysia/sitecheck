@@ -289,6 +289,25 @@ class WebChecker:
                     print_info("Updated {}. {}".format(name, url))
                     self.dirty_flag = True
 
+class SiteVecIterator(object):
+    def __init__(self, checker, cond = None):
+        self.list = []
+        for resid in checker.get_resid_list(cond):
+            name = checker.get_summary_value(resid, "name")
+            url = checker.get_summary_value(resid, "url")
+            self.list.append([name, url])
+        self.current = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.current == len(self.list):
+            raise StopIteration()
+        v = self.list[self.current]
+        self.current += 1
+        return v
+
 if __name__ == "__main__":
 
     import argparse
@@ -344,10 +363,8 @@ if __name__ == "__main__":
         try:
             with open(args.expfile, "w", newline="") as fexp:
                 writer = csv.writer(fexp, delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
-                for resid in checker.summaries:
-                    name = checker.get_summary_value(resid, "name")
-                    url = checker.get_summary_value(resid, "url")
-                    writer.writerow([name, url])
+                for v in SiteVecIterator(checker):
+                    writer.writerow(v)
         except Exception as e:
             print_error("Failed to write config. {}".format(e))
             exit(errno.ENOENT)
