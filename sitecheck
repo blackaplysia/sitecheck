@@ -320,16 +320,16 @@ if __name__ == "__main__":
             super(SortingHelpFormatter, self).add_arguments(actions)
 
     parser = argparse.ArgumentParser(description="Check updating of web sites", usage="%(prog)s [options] [target]", formatter_class=SortingHelpFormatter)
-    parser.add_argument("-i", "--import", dest="impfile", metavar="FILE", default=None, help="import site list from file")
-    parser.add_argument("-a", "--add", nargs=2, dest="new_site", metavar=("NAME", "URL"), action="append", help="add an site")
-    parser.add_argument("-d", "--delete", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
+    parser.add_argument("-i", dest="impfile", metavar="FILE", default=None, help="import site list from file")
+    parser.add_argument("-a", dest="new_site", nargs=2, metavar=("NAME", "URL"), action="append", help="add an site")
+    parser.add_argument("-d", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("-e", "--export", dest="expfile", metavar="FILE", default=None, help="export site list to file")
-    group.add_argument("-c", "--check", action="store_true", help="check sites")
-    group.add_argument("-C", "--recheck", action="store_true", help="rerun to check sites that has failed to update")
-    group.add_argument("-l", "--list", action="append", nargs="?", metavar="COND", help="list target sites (cond: ALL|LAST|name|time)")
-    group.add_argument("-p", "--print", action="append", nargs="?", metavar="COND", help="print the last updates (cond: ALL|LAST|name|time)")
+    group.add_argument("-e", dest="expfile", metavar="FILE", default=None, help="export site list to file")
+    group.add_argument("-c", dest="check", action="store_true", help="check sites")
+    group.add_argument("-C", dest="recheck", action="store_true", help="rerun to check sites that has failed to update")
+    group.add_argument("-l", dest="list", action="append", nargs="?", metavar="COND", help="list target sites (cond: ALL|LAST|name|time)")
+    group.add_argument("-p", dest="print", action="append", nargs="?", metavar="COND", help="print the last updates (cond: ALL|LAST|name|time)")
 
     if len(sys.argv) == 1:
         print_error(parser.format_usage())
