@@ -340,8 +340,9 @@ if __name__ == "__main__":
     log_file_format = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
     log_console_format = "%(levelname)s: %(message)s"
     if args.log is True:
-        logging.basicConfig(filename=os.path.basename(__file__) + ".log", format=log_file_format, level=logging.DEBUG)
+        logging.basicConfig(filename=os.path.basename(__file__) + ".log", format=log_file_format)
         logging.getLogger("chardet.charsetprober").setLevel(level=logging.INFO)
+    logger.setLevel(logging.DEBUG)
     console = logging.StreamHandler()
     console.setFormatter(logging.Formatter(log_console_format))
     console.setLevel(logging.INFO)
