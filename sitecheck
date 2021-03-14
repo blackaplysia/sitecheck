@@ -20,18 +20,6 @@ from urllib.parse import urljoin
 
 logger = logging.getLogger()
 
-def shell(cmdline, intext):
-    proc = subprocess.Popen(cmdline, shell=True, stdin=PIPE, stdout=PIPE)
-    out, err = proc.communicate(input=intext.encode())
-    if len(out) < 0:
-        return None
-
-    coding = chardet.detect(out)["encoding"]
-    if coding is None:
-        return None
-    
-    return out.decode(coding)
-
 class WebChecker:
 
     def __init__(self):
@@ -243,8 +231,6 @@ class WebChecker:
                 if cs is not None:
                     tagname = re.sub("[　 ]+", " ", "::".join(filter(lambda x: len(x) > 0, [s.strip() for s in cs])))
                 links.append(tagname + (" " if len(tagname) > 0 else "") + "---- " + ref)
-                if "translation.mhlw.go.jp" in ref:
-                    print(tagname + (" " if len(tagname) > 0 else "") + "---- " + ref)
         return links
 
     def update(self, do_rerun = False):
