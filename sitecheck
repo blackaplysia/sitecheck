@@ -288,23 +288,23 @@ class WebChecker:
                         logger.info("Updated {}".format(name))
                         self.dirty_flag = True
 
-class SiteVecIterator(object):
-    def __init__(self, checker, cond = None):
-        self.list = []
-        for resid in checker.get_resid_list(cond):
-            name = checker.get_summary_value(resid, "name")
-            url = checker.get_summary_value(resid, "url")
-            self.list.append([name, url])
-        self.current = 0
+    def sites(self, cond = None):
+        self.iter_list = []
+        for resid in self.get_resid_list(cond):
+            name = self.get_summary_value(resid, "name")
+            url = self.get_summary_value(resid, "url")
+            self.iter_list.append([name, url])
+        self.iter_current = 0
+        return self
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self.current == len(self.list):
+        if self.iter_current == len(self.iter_list):
             raise StopIteration()
-        v = self.list[self.current]
-        self.current += 1
+        v = self.iter_list[self.iter_current]
+        self.iter_current += 1
         return v
 
 if __name__ == "__main__":
@@ -383,7 +383,7 @@ if __name__ == "__main__":
             if fn is not None:
                 fexp = open(fn, "w", newline="")
             writer = csv.writer(fexp, delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
-            for v in SiteVecIterator(checker):
+            for v in checker.sites():
                 writer.writerow(v)
             if fexp != sys.stdout:
                 fexp.close()
