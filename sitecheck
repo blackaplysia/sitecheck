@@ -15,6 +15,8 @@ import sys
 import time
 from datetime import datetime
 from subprocess import PIPE
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
 logger = logging.getLogger()
 
@@ -229,9 +231,21 @@ class WebChecker:
                 print(self.get_summary_value(resid, "log"))
                 sep = "-" * 72
 
-    def render(self, html):
-        text = shell("w3m -T text/html -cols 256 -dump", html)
-        return re.sub("[ 　]+", " ", text)
+    def list_links(self, html, url_base):
+        links = []
+        for t in BeautifulSoup(html, "html.parser").find_all("a"):
+            ref = t.get("href")
+            if ref is not None:
+                ref = "".join(filter(lambda c: c >= ' ', ref))
+                if url_base is not None:
+                    ref = urljoin(url_base, ref)
+                cs = t.strings
+                if cs is not None:
+                    tagname = re.sub("[　 ]+", " ", "::".join(filter(lambda x: len(x) > 0, [s.strip() for s in cs])))
+                links.append(tagname + (" " if len(tagname) > 0 else "") + "---- " + ref)
+                if "translation.mhlw.go.jp" in ref:
+                    print(tagname + (" " if len(tagname) > 0 else "") + "---- " + ref)
+        return links
 
     def update(self, do_rerun = False):
         if len(self.summaries) > 0:
@@ -275,13 +289,11 @@ class WebChecker:
                             diff = diff + "Initial update"
                             self.update_summary(resid, "log", diff)
                         else:
-                            old_lines = self.render(self.contents[resid]["text"]).splitlines()
-                            new_lines = self.render(res.text).splitlines()
-                            diff_lines = difflib.unified_diff(old_lines, new_lines)
-                            for l in diff_lines:
-                                if l[0] == "+" and not re.match("^\++\s$", l):
-                                    diff = diff + "> " + l + "\n"
-                            self.update_summary(resid, "log", diff )
+                            old_lines = self.list_links(self.contents[resid]["text"], url)
+                            new_lines = self.list_links(res.text, url)
+                            diff_lines = difflib.unified_diff(old_lines, new_lines, n=0)
+                            diff += "\n".join(map(lambda x: "> " + x, filter(lambda l: l[0] == "+" and not re.match("^\++\s$", l), diff_lines)))
+                            self.update_summary(resid, "log", diff)
                         self.update_summary(resid, "hash", md5)
                         self.update_contents(resid, res.text)
                         self.update_summary(resid, "updated", self.now)
