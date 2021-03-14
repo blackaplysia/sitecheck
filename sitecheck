@@ -135,7 +135,9 @@ class WebChecker:
                     continue
 
                 resid = self.get_resid(name, url)
-                if resid not in self.summaries:
+                if resid in self.summaries:
+                    logger.warning("{} is already registered".format(url))
+                else:
                     logger.info("Added {} {}".format(name, url))
                     self.init_summary(resid, name, url, -1)
                     self.init_contents(resid)
