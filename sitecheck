@@ -97,6 +97,9 @@ class WebChecker:
                 data = json.loads(fcache.read())
                 self.properties = data.get("property")
                 self.summaries = data.get("summary")
+        except FileNotFoundError as e:
+            logger.warning("Found no summary")
+            logger.debug(e)
         except Exception as e:
             logger.warning("Failed to load summary")
             logger.debug(e)
