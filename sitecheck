@@ -60,10 +60,13 @@ class WebChecker:
                 s = sorted(self.isotimestamps, reverse=True)
                 if len(s) > 0:
                     resids.extend(self.isotimestamps.get(s[0]))
-        elif cond in self.names:
-            resids.append(self.names.get(cond))
-        elif cond in self.isotimestamps:
-            resids.extend(self.isotimestamps.get(cond))
+        else:
+            for name, resid in self.names.items():
+                if cond in name:
+                    resids.append(resid)
+            for timestamp in self.isotimestamps:
+                if cond in timestamp:
+                    resids.extend(self.isotimestamps.get(timestamp))
         return resids
 
     def update_summary(self, resid, key, value):
