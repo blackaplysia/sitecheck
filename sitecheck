@@ -204,7 +204,7 @@ class WebChecker:
 
     def list(self, cond = None):
         if len(self.summaries) > 0:
-            for resid in self.get_resid_list(cond):
+            for resid in sorted(self.get_resid_list(cond), key=lambda resid:self.get_summary_value(resid, "name")):
                 name = self.get_summary_value(resid, "name")
                 url = self.get_summary_value(resid, "url")
                 updated = self.get_summary_value(resid, "updated")
@@ -212,10 +212,16 @@ class WebChecker:
                     updated = datetime.utcfromtimestamp(updated).isoformat()
                 print("{} {} {} {}".format(resid, updated, name, url))
 
+    def list_timestamps(self):
+        if len(self.summaries) > 0:
+            for t, resids in sorted(self.isotimestamps.items()):
+                for resid in sorted(resids, key=lambda resid:self.get_summary_value(resid, "name")):
+                    print("{} {}".format(t, self.get_summary_value(resid, "name")))
+
     def print(self, cond = None):
         if len(self.summaries) > 0:
             sep = None
-            for resid in self.get_resid_list(cond):
+            for resid in sorted(self.get_resid_list(cond), key=lambda resid:self.get_summary_value(resid, "name")):
                 updated = self.get_summary_value(resid, "updated")
                 if updated is not None:
                     updated = datetime.utcfromtimestamp(updated).isoformat()
@@ -332,6 +338,7 @@ if __name__ == "__main__":
     group.add_argument("-c", dest="check", action="store_true", help="check sites")
     group.add_argument("-C", dest="recheck", action="store_true", help="rerun to check sites that has failed to update")
     group.add_argument("-l", dest="list", action="append", nargs="?", metavar="COND", help="list target sites (cond: ALL|LAST|name|time)")
+    group.add_argument("--list-timestamps", dest="list_timestamps", action="store_true", help="list time stamps")
     group.add_argument("-p", dest="print", action="append", nargs="?", metavar="COND", help="print the last updates (cond: ALL|LAST|name|time)")
 
     if len(sys.argv) == 1:
@@ -398,6 +405,8 @@ if __name__ == "__main__":
         checker.update()
     elif args.recheck is True:
         checker.update(True)
+    elif args.list_timestamps is True:
+        checker.list_timestamps()
     elif args.list is not None:
         checker.list(args.list[0])
     elif args.print is not None:
