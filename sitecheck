@@ -327,7 +327,7 @@ if __name__ == "__main__":
     from operator import attrgetter
     class SortingHelpFormatter(HelpFormatter):
         def add_arguments(self, actions):
-            actions = sorted(actions, key=attrgetter("option_strings"))
+            actions = sorted(actions, key=lambda x: x.option_strings[0].lstrip("-").lower())
             super(SortingHelpFormatter, self).add_arguments(actions)
 
     parser = argparse.ArgumentParser(description="Check updating of web sites", formatter_class=SortingHelpFormatter)
