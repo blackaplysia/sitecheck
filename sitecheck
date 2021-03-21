@@ -95,7 +95,7 @@ class WebChecker:
         self.contents.update({ resid: {}})
         self.update_contents(resid, text, updated=False)
 
-    def load(self, site_list = None, deleting_name_list = None):
+    def load(self, site_list = None, deleting_name_list = None, renaming_name_pair_list = None):
         if self.is_loaded == True:
             return
 
@@ -165,6 +165,35 @@ class WebChecker:
                     del self.summaries[resid]
                     del self.contents[resid]
                     self.deleting_list.append(resid)
+                    self.dirty_flag = True
+
+        if renaming_name_pair_list is not None:
+            for name_pair in renaming_name_pair_list:
+                if len(name_pair) < 2:
+                    continue
+
+                old = None
+                new = None
+                if isinstance(name_pair, list):
+                    old = name_pair[0].strip()
+                    new = name_pair[1].strip()
+                elif isinstance(name_pair, dict):
+                    old = name_pair.get("old").strip()
+                    new = name_pair.get("new").strip()
+                else:
+                    continue
+
+                if old is None or len(old) < 1:
+                    continue
+                if new is None or len(new) < 1:
+                    continue
+
+                resid = self.get_resid_by_name(old)
+                if resid is None:
+                    logger.warning("{} is not registered".format(old))
+                else:
+                    logger.info("Renamed {} to {}".format(old, new))
+                    self.update_summary(resid, "name", new)
                     self.dirty_flag = True
 
         for resid, summary in self.summaries.items():
@@ -358,8 +387,9 @@ if __name__ == "__main__":
     subparser_config = subparsers.add_parser("config", help="configure the command")
     subparser_config.add_argument("--import", dest="impfile", metavar="FILE", help="import site list from file")
     subparser_config.add_argument("--export", dest="expfile", metavar="FILE", help="export site list to file")
-    subparser_config.add_argument("--add", nargs=2, metavar=("NAME", "URL"), action="append", help="add an site")
-    subparser_config.add_argument("--delete", metavar="NAME", action="append", help="delete an site")
+    subparser_config.add_argument("--add", nargs=2, metavar=("NAME", "URL"), action="append", help="add a site")
+    subparser_config.add_argument("--delete", metavar="NAME", action="append", help="delete a site")
+    subparser_config.add_argument("--rename", nargs=2, metavar=("OLD", "NEW"), action="append", help="rename a site")
     subparser_check = subparsers.add_parser("check", help="check registered sites")
     subparser_recheck = subparsers.add_parser("recheck", help="rerun to check registered sites")
     subparser_timestamps = subparsers.add_parser("timestamps", help="print last updated timestamps")
@@ -422,7 +452,7 @@ if __name__ == "__main__":
             for site in args.add:
                 site_list.append(site)
 
-        checker.load(site_list, args.delete)
+        checker.load(site_list, args.delete, args.rename)
 
         if args.expfile is not None:
             fexp = sys.stdout
