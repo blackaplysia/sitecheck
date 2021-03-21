@@ -417,17 +417,17 @@ if __name__ == "__main__":
 
     checker = WebChecker()
 
-    if args.subparser_name == "check":
+    if args.subparser_name == "check" or args.subparser_name == "c":
         checker.update()
-    elif args.subparser_name == "recheck":
+    elif args.subparser_name == "recheck" or args.subparser_name == "r":
         checker.update(rerun=True)
-    elif args.subparser_name == "timestamps":
+    elif args.subparser_name == "timestamps" or args.subparser_name == "ts":
         checker.list_timestamps()
-    elif args.subparser_name == "list":
+    elif args.subparser_name == "list" or args.subparser_name == "l":
         checker.list(args.target)
-    elif args.subparser_name == "print":
+    elif args.subparser_name == "print" or args.subparser_name == "p":
         checker.print(args.target)
-    elif args.subparser_name == "config":
+    elif args.subparser_name == "config" or args.subparser_name == "cfg":
         site_list = []
         lines = None
         if args.impfile is not None:
