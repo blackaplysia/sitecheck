@@ -36,6 +36,7 @@ class WebChecker:
         os.makedirs(self.files_dir, mode=0o777, exist_ok=True)
         self.data_path = self.cache_dir + "/" + os.path.basename(__file__) + ".json"
         self.now = time.time()
+        self.is_loaded = False
         self.dirty_flag = False
 
     def get_resid(self, name, url):
@@ -94,7 +95,10 @@ class WebChecker:
         self.contents.update({ resid: {}})
         self.update_contents(resid, text, updated=False)
 
-    def load(self, site_list, deleting_name_list):
+    def load(self, site_list = None, deleting_name_list = None):
+        if self.is_loaded == True:
+            return
+
         try:
             with open(self.data_path) as fcache:
                 data = json.loads(fcache.read())
@@ -106,6 +110,8 @@ class WebChecker:
         except Exception as e:
             logger.warning("Failed to load summary")
             logger.debug(e)
+
+        self.is_loaded = True
 
         for resid in self.summaries:
             if self.get_summary_value(resid, "hash") is None:
@@ -175,6 +181,7 @@ class WebChecker:
                     self.isotimestamps[isotimestamp].append(resid)
 
     def save(self):
+        self.load()
         if self.dirty_flag is True:
             if len(self.summaries) > 0:
                 self.properties["updated"] = self.now
@@ -206,7 +213,10 @@ class WebChecker:
                         os.remove(contents)
 
     def list(self, cond = None):
-        if len(self.summaries) > 0:
+        self.load()
+        if len(self.summaries) <= 0:
+            logger.warning("No sites were found")
+        else:
             for resid in sorted(self.get_resid_list(cond), key=lambda resid:self.get_summary_value(resid, "name")):
                 name = self.get_summary_value(resid, "name")
                 url = self.get_summary_value(resid, "url")
@@ -216,13 +226,19 @@ class WebChecker:
                 print("{} {} {} {}".format(resid, updated, name, url))
 
     def list_timestamps(self):
-        if len(self.summaries) > 0:
+        self.load()
+        if len(self.summaries) <= 0:
+            logger.warning("No sites were found")
+        else:
             for t, resids in sorted(self.isotimestamps.items()):
                 for resid in sorted(resids, key=lambda resid:self.get_summary_value(resid, "name")):
                     print("{} {}".format(t, self.get_summary_value(resid, "name")))
 
     def print(self, cond = None):
-        if len(self.summaries) > 0:
+        self.load()
+        if len(self.summaries) <= 0:
+            logger.warning("No sites were found")
+        else:
             sep = None
             for resid in sorted(self.get_resid_list(cond), key=lambda resid:self.get_summary_value(resid, "name")):
                 updated = self.get_summary_value(resid, "updated")
@@ -247,11 +263,14 @@ class WebChecker:
                 links.append(tagname + (" " if len(tagname) > 0 else "") + "---- " + ref)
         return links
 
-    def update(self, do_rerun = False):
-        if len(self.summaries) > 0:
+    def update(self, rerun = False):
+        self.load()
+        if len(self.summaries) <= 0:
+            logger.warning("No sites were found")
+        else:
             for resid, summary in self.summaries.items():
                 status = summary.get("status")
-                if do_rerun is True and status > 0 and status < 400:
+                if rerun is True and status > 0 and status < 400:
                     continue
 
                 self.update_summary(resid, "status", -1)
@@ -301,6 +320,7 @@ class WebChecker:
                         self.dirty_flag = True
 
     def sites(self, cond = None):
+        self.load()
         self.iter_list = []
         for resid in self.get_resid_list(cond):
             name = self.get_summary_value(resid, "name")
@@ -327,22 +347,26 @@ if __name__ == "__main__":
     from operator import attrgetter
     class SortingHelpFormatter(HelpFormatter):
         def add_arguments(self, actions):
-            actions = sorted(actions, key=lambda x: x.option_strings[0].lstrip("-").lower())
+            actions = sorted(actions, key=attrgetter("option_strings"))
+#            actions = sorted(actions, key=lambda x: x.option_strings[0].lstrip("-").lower())
             super(SortingHelpFormatter, self).add_arguments(actions)
 
     parser = argparse.ArgumentParser(description="Check updating of web sites", formatter_class=SortingHelpFormatter)
-    parser.add_argument("-i", dest="impfile", action="append", nargs="?", metavar="FILE", help="import site list from file")
-    parser.add_argument("-a", dest="new_site", nargs=2, metavar=("NAME", "URL"), action="append", help="add an site")
-    parser.add_argument("-d", dest="deleting_site", metavar="NAME", action="append", help="delete an site")
     parser.add_argument("--log", action="store_true", help="debug output to log file")
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("-e", dest="expfile", action="append", nargs="?", metavar="FILE", help="export site list to file")
-    group.add_argument("-c", dest="check", action="store_true", help="check sites")
-    group.add_argument("-C", dest="recheck", action="store_true", help="rerun to check sites that has failed to update")
-    group.add_argument("-l", dest="list", action="append", nargs="?", metavar="COND", help="list target sites (cond: ALL|LAST|name|time)")
-    group.add_argument("--list-timestamps", dest="list_timestamps", action="store_true", help="list time stamps")
-    group.add_argument("-p", dest="print", action="append", nargs="?", metavar="COND", help="print the last updates (cond: ALL|LAST|name|time)")
+    subparsers = parser.add_subparsers(dest="subparser_name")
+    subparser_config = subparsers.add_parser("config")
+    subparser_config.add_argument("--import", dest="impfile", metavar="FILE", help="import site list from file")
+    subparser_config.add_argument("--export", dest="expfile", metavar="FILE", help="export site list to file")
+    subparser_config.add_argument("--add", nargs=2, metavar=("NAME", "URL"), action="append", help="add an site")
+    subparser_config.add_argument("--delete", metavar="NAME", action="append", help="delete an site")
+    subparser_check = subparsers.add_parser("check")
+    subparser_recheck = subparsers.add_parser("recheck")
+    subparser_timestamps = subparsers.add_parser("timestamps")
+    subparser_list = subparsers.add_parser("list")
+    subparser_list.add_argument("target", nargs="?", metavar="TARGET", help="target (ALL|LAST|name|time)")
+    subparser_print = subparsers.add_parser("print")
+    subparser_print.add_argument("target", nargs="?", metavar="TARGET", help="target (ALL|LAST|name|time)")
 
     if len(sys.argv) == 1:
         print(parser.format_usage(), file=sys.stderr)
@@ -361,58 +385,58 @@ if __name__ == "__main__":
     console.setLevel(logging.INFO)
     logger.addHandler(console)
 
-    site_list = []
-    lines = None
-    if args.impfile is not None:
-        fconfig = sys.stdin
-        try:
-            fn = args.impfile[0]
-            if fn is not None:
-                fconfig = open(fn)
-            lines = fconfig.read() + "\n"
-            if fconfig != sys.stdin:
-                fconfig.close()
-        except Exception as e:
-            logger.critical("Failed to read config")
-            logger.debug(e)
-            exit(errno.ENOENT)
+    checker = WebChecker()
+
+    if args.subparser_name == "check":
+        checker.update()
+    elif args.subparser_name == "recheck":
+        checker.update(rerun=True)
+    elif args.subparser_name == "timestamps":
+        checker.list_timestamps()
+    elif args.subparser_name == "list":
+        checker.list(args.target)
+    elif args.subparser_name == "print":
+        checker.print(args.target)
+    elif args.subparser_name == "config":
+        site_list = []
+        lines = None
+        if args.impfile is not None:
+            fimp = sys.stdin
+            try:
+                if args.impfile != "-":
+                    fimp = open(args.impfile)
+                lines = fimp.read() + "\n"
+                if fimp != sys.stdin:
+                    fimp.close()
+            except Exception as e:
+                logger.critical("Failed to import config")
+                logger.debug(e)
+                exit(errno.ENOENT)
 
         if lines is not None:
             config = csv.reader(filter(lambda x: len(x.strip()) > 1 and x[0] != "#", lines.splitlines()), delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
             for site in config:
                 site_list.append(site)
 
-    if args.new_site is not None:
-        for site in args.new_site:
-            site_list.append(site)
+        if args.add is not None:
+            for site in args.add:
+                site_list.append(site)
 
-    checker = WebChecker()
-    checker.load(site_list, args.deleting_site)
+        checker.load(site_list, args.delete)
 
-    if args.expfile is not None:
-        fexp = sys.stdout
-        try:
-            fn = args.expfile[0]
-            if fn is not None:
-                fexp = open(fn, "w", newline="")
-            writer = csv.writer(fexp, delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
-            for v in checker.sites():
-                writer.writerow(v)
-            if fexp != sys.stdout:
-                fexp.close()
-        except Exception as e:
-            logger.critical("Failed to write config")
-            logger.debug(e)
-            exit(errno.ENOENT)
-    elif args.check is True:
-        checker.update()
-    elif args.recheck is True:
-        checker.update(True)
-    elif args.list_timestamps is True:
-        checker.list_timestamps()
-    elif args.list is not None:
-        checker.list(args.list[0])
-    elif args.print is not None:
-        checker.print(args.print[0])
+        if args.expfile is not None:
+            fexp = sys.stdout
+            if args.expfile != "-":
+                fexp = open(args.expfile, "w", newline="")
+            try:
+                writer = csv.writer(fexp, delimiter="=", quotechar="\"", doublequote=False, escapechar="\\")
+                for v in checker.sites():
+                    writer.writerow(v)
+                if fexp != sys.stdout:
+                    fexp.close()
+            except Exception as e:
+                logger.critical("Failed to export config")
+                logger.debug(e)
+                exit(errno.ENOENT)
 
     checker.save()
