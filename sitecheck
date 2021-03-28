@@ -278,8 +278,35 @@ class WebChecker:
                 print(self.get_summary_value(resid, "log"))
                 sep = "-" * 72
 
+    def get_real_title(self, title):
+        real_title = title["name"]
+        url = title["link"]
+        res = None
+        try:
+            res = requests.get(url)
+        except requests.exceptions.InvalidSchema as e:
+            logger.debug(e)
+        except requests.exceptions.RequestException as e:
+            logger.warning("Failed to fetch {}".format(url))
+            logger.debug(e)
+        except Exception as e:
+            logger.warning("Failed to fetch {}".format(url))
+            logger.debug(e)
+
+        if res is not None:
+            if res.status_code >= 400:
+                logger.warning("Failed to fetch {}. Status code={}".format(url, res.status_code))
+            else:
+                enc = res.encoding if res.encoding != "ISO-8859-1" else None
+                s = BeautifulSoup(res.content, "html.parser", from_encoding=enc).find("title")
+                if s is not None:
+                    real_title = s.get_text()
+
+        return real_title + (" " if len(real_title) > 0 else "") + "---- " + url
+
     def list_links(self, html, url_base):
         links = []
+        titles = {}
         for t in BeautifulSoup(html, "html.parser").find_all("a"):
             ref = t.get("href")
             if ref is not None:
@@ -288,9 +315,11 @@ class WebChecker:
                     ref = urljoin(url_base, ref)
                 cs = t.strings
                 if cs is not None:
-                    tagname = re.sub("[　 ]+", " ", "::".join(filter(lambda x: len(x) > 0, [s.strip() for s in cs])))
-                links.append(tagname + (" " if len(tagname) > 0 else "") + "---- " + ref)
-        return links
+                    title = re.sub("[　 ]+", " ", "::".join(filter(lambda x: len(x) > 0, [s.strip() for s in cs])))
+                tagname = title + (" " if len(title) > 0 else "") + "---- " + ref
+                links.append(tagname)
+                titles.update({tagname: { "name": title, "link": ref }})
+        return (links, titles)
 
     def update(self, rerun = False):
         self.load()
@@ -320,7 +349,7 @@ class WebChecker:
 
                 self.update_summary(resid, "status", res.status_code)
                 if res.status_code >= 400:
-                    logger.warning("Failed to fetch {}".format(name), "Status code={}".format(res.status_code))
+                    logger.warning("Failed to fetch {}. Status code={}".format(name, res.status_code))
                 else:
                     res.encoding = res.apparent_encoding
                     self.update_summary(resid, "encoding", res.encoding)
@@ -337,10 +366,11 @@ class WebChecker:
                             diff = diff + "Initial update"
                             self.update_summary(resid, "log", diff)
                         else:
-                            old_lines = self.list_links(self.contents[resid]["text"], url)
-                            new_lines = self.list_links(res.text, url)
+                            (old_lines, old_titles) = self.list_links(self.contents[resid]["text"], url)
+                            (new_lines, new_titles) = self.list_links(res.text, url)
                             diff_lines = difflib.unified_diff(old_lines, new_lines, n=0)
-                            diff += "\n".join(map(lambda x: "> " + x, filter(lambda l: l[0] == "+" and not re.match("^\++\s$", l), diff_lines)))
+                            updated_list = list(map(lambda x: "> " + self.get_real_title(new_titles[x[1:]]), filter(lambda l: l[0] == "+" and not re.match("^\++\s$", l), diff_lines)))
+                            diff += "\n".join(sorted(set(updated_list), key=updated_list.index))
                             self.update_summary(resid, "log", diff)
                         self.update_summary(resid, "hash", md5)
                         self.update_contents(resid, res.text)
@@ -409,6 +439,7 @@ if __name__ == "__main__":
     if args.log is True:
         logging.basicConfig(filename=os.path.basename(__file__) + ".log", format=log_file_format)
         logging.getLogger("chardet.charsetprober").setLevel(level=logging.INFO)
+        logging.getLogger("chardet.universaldetector").setLevel(level=logging.INFO)
     logger.setLevel(logging.DEBUG)
     console = logging.StreamHandler()
     console.setFormatter(logging.Formatter(log_console_format))
