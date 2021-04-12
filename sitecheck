@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 class WebChecker:
 
@@ -411,7 +412,7 @@ if __name__ == "__main__":
             super(SortingHelpFormatter, self).add_arguments(actions)
 
     parser = argparse.ArgumentParser(description="Check updating of web sites", formatter_class=SortingHelpFormatter)
-    parser.add_argument("--log", action="store_true", help="debug output to log file")
+    parser.add_argument("--debug", action="store_true", help="debug output")
 
     subparsers = parser.add_subparsers(dest="subparser_name", title="action arguments")
     subparser_config = subparsers.add_parser("config", aliases=["cfg"], help="configure the command")
@@ -434,16 +435,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    log_file_format = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
-    log_console_format = "%(levelname)s: %(message)s"
-    if args.log is True:
-        logging.basicConfig(filename=os.path.basename(__file__) + ".log", format=log_file_format)
-        logging.getLogger("chardet.charsetprober").setLevel(level=logging.INFO)
-        logging.getLogger("chardet.universaldetector").setLevel(level=logging.INFO)
-    logger.setLevel(logging.DEBUG)
+    log_format = "%(levelname)s: %(message)s"
+    log_level = logging.INFO
+    if args.debug is True:
+        log_format = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
+        log_level = logging.DEBUG
     console = logging.StreamHandler()
-    console.setFormatter(logging.Formatter(log_console_format))
-    console.setLevel(logging.INFO)
+    console.setFormatter(logging.Formatter(log_format))
+    console.setLevel(log_level)
     logger.addHandler(console)
 
     checker = WebChecker()
