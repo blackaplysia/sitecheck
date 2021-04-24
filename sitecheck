@@ -269,15 +269,13 @@ class WebChecker:
         if len(self.summaries) <= 0:
             logger.warning("No sites were found")
         else:
-            sep = None
             for resid in sorted(self.get_resid_list(cond), key=lambda resid:self.get_summary_value(resid, "name")):
-                updated = self.get_summary_value(resid, "updated")
-                if updated is not None:
-                    updated = datetime.utcfromtimestamp(updated).isoformat()
-                if sep is not None:
-                    print(sep)
-                print(self.get_summary_value(resid, "log"))
-                sep = "-" * 72
+                log = self.get_summary_value(resid, "log")
+                if log is None or len(log) == 0:
+                    name = self.get_summary_value(resid, "name")
+                    logger.warning("Found no content updates: {}".format(name))
+                else:
+                    print(self.get_summary_value(resid, "log"))
 
     def get_real_title(self, title):
         real_title = title["name"]
@@ -299,9 +297,16 @@ class WebChecker:
                 logger.warning("Failed to fetch {}. Status code={}".format(url, res.status_code))
             else:
                 enc = res.encoding if res.encoding != "ISO-8859-1" else None
-                s = BeautifulSoup(res.content, "html.parser", from_encoding=enc).find("title")
-                if s is not None:
-                    real_title = s.get_text()
+                bs = BeautifulSoup(res.content, "html.parser", from_encoding=enc)
+                s = None
+                s_tag = bs.find("title")
+                s_ogp = bs.find("meta", attrs={"property": "og:title"})
+                if s_ogp is not None:
+                    s = s_ogp.get("content")
+                elif s_tag is not None:
+                    s = s_tag.get_text()
+                if s is not None and len(s) > 0:
+                    real_title = s
 
         return real_title + (" " if len(real_title) > 0 else "") + "---- " + url
 
@@ -356,23 +361,15 @@ class WebChecker:
                     self.update_summary(resid, "encoding", res.encoding)
                     md5 = hashlib.md5(res.text.encode()).hexdigest()
                     if "hash" not in summary or md5 != summary["hash"]:
-                        diff_header_lines = []
-                        diff_header_lines.append("name: " + name)
-                        diff_header_lines.append("url: " + url)
-                        diff_header_lines.append("resid: " + resid)
-                        diff_header_lines.append("hash: " + md5)
-                        diff_header_lines.append("updated: " + datetime.utcfromtimestamp(self.now).isoformat())
-                        diff = "\n".join(diff_header_lines) + "\n"
-                        if self.contents[resid]["text"] is None:
-                            diff = diff + "Initial update"
-                            self.update_summary(resid, "log", diff)
-                        else:
+                        diff = ""
+                        if self.contents[resid]["text"] is not None:
                             (old_lines, old_titles) = self.list_links(self.contents[resid]["text"], url)
                             (new_lines, new_titles) = self.list_links(res.text, url)
                             diff_lines = difflib.unified_diff(old_lines, new_lines, n=0)
-                            updated_list = list(map(lambda x: "> " + self.get_real_title(new_titles[x[1:]]), filter(lambda l: l[0] == "+" and not re.match("^\++\s$", l), diff_lines)))
-                            diff += "\n".join(sorted(set(updated_list), key=updated_list.index))
-                            self.update_summary(resid, "log", diff)
+                            updated_list = list(map(lambda x: self.get_real_title(new_titles[x[1:]]), filter(lambda l: l[0] == "+" and not re.match("^\++\s$", l), diff_lines)))
+                            if len(updated_list) > 0:
+                                diff = "\n".join(sorted(set(updated_list), key=updated_list.index))
+                        self.update_summary(resid, "log", diff)
                         self.update_summary(resid, "hash", md5)
                         self.update_contents(resid, res.text)
                         self.update_summary(resid, "updated", self.now)
