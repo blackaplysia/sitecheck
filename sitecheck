@@ -3,6 +3,7 @@
 import chardet
 import difflib
 import errno
+import filetype
 import hashlib
 import json
 import logging
@@ -296,17 +297,22 @@ class WebChecker:
             if res.status_code >= 400:
                 logger.warning("Failed to fetch {}. Status code={}".format(url, res.status_code))
             else:
-                enc = res.encoding if res.encoding != "ISO-8859-1" else None
-                bs = BeautifulSoup(res.content, "html.parser", from_encoding=enc)
-                s = None
-                s_tag = bs.find("title")
-                s_ogp = bs.find("meta", attrs={"property": "og:title"})
-                if s_ogp is not None:
-                    s = s_ogp.get("content")
-                elif s_tag is not None:
-                    s = s_tag.get_text()
-                if s is not None and len(s) > 0:
-                    real_title = s
+                ftype = filetype.guess(res.content)
+                if ftype:
+                    real_title = "[" + ftype.extension + "]" + real_title
+                    logger.warning("Media file ({}): {}".format(ftype.extension, url))
+                else:
+                    enc = res.encoding if res.encoding != "ISO-8859-1" else None
+                    bs = BeautifulSoup(res.content, "html.parser", from_encoding=enc)
+                    s = None
+                    s_tag = bs.find("title")
+                    s_ogp = bs.find("meta", attrs={"property": "og:title"})
+                    if s_ogp is not None:
+                        s = s_ogp.get("content")
+                    elif s_tag is not None:
+                        s = s_tag.get_text()
+                    if s is not None and len(s) > 0:
+                        real_title = s
 
         return real_title + (" " if len(real_title) > 0 else "") + "---- " + url
 
