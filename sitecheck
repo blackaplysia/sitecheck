@@ -263,7 +263,7 @@ class WebChecker:
         else:
             for t, resids in sorted(self.isotimestamps.items()):
                 for resid in sorted(resids, key=lambda resid:self.get_summary_value(resid, "name")):
-                    print("{} {}".format(t, self.get_summary_value(resid, "name")))
+                    print("{} {} {}".format(t, self.get_summary_value(resid, "name"), self.get_summary_value(resid, "url")))
 
     def print(self, cond = None):
         self.load()
